@@ -39,7 +39,9 @@
         <div class="shortcuts" aria-label="Быстрый выбор периода"><button type="button" data-period="1" aria-pressed="false">Сутки</button><button type="button" data-period="7" aria-pressed="false">7 дней</button><button type="button" data-period="14" aria-pressed="false">14 дней</button><button type="button" data-period="month" aria-pressed="false">Месяц</button><button type="button" data-period="all" aria-pressed="true">Все</button></div>
         <p id="period-error" class="error" role="alert" hidden></p>
       </fieldset>
-      <div class="period-total"><span>Итого за период</span><strong id="period-total" aria-live="polite">0 ₸</strong></div>
+      <div class="period-total"><span>Итого за период</span><strong id="period-total" aria-live="polite">0 ₸</strong><button id="delete-expense" type="button" disabled aria-describedby="delete-hint">Удалить</button></div>
+      <p id="delete-hint">Выберите одну трату в списке, чтобы удалить её.</p>
+      <p id="delete-status" role="status"></p>
       <p id="empty-state">Пока нет трат</p>
       <ul id="expense-list" aria-label="Траты"></ul>
     </section>

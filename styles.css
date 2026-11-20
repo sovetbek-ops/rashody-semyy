@@ -39,9 +39,19 @@ legend { font-weight: 600; padding: 0; margin-bottom: 12px; }
 .shortcuts [aria-pressed="true"] { background: #e0eee5; border-color: #51846a; }
 .period-total { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; margin-top: 22px; padding: 18px 0; border-block: 1px solid #e4eae5; }
 .period-total strong { overflow-wrap: anywhere; }
+.period-total { align-items: center; }
+#delete-expense { color: #a82f27; border-color: #d8aaa5; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+#delete-hint { color: #60746c; font-size: 13px; margin: 12px 0 0; }
+#delete-status { font-size: 14px; margin: 8px 0 0; }
+#delete-status:empty { display: none; }
 #empty-state { color: #60746c; text-align: center; padding: 24px 0 8px; }
 #expense-list { list-style: none; padding: 0; margin: 0; }
-.expense { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; padding: 20px 0; border-bottom: 1px solid #e4eae5; }
+.expense { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 10px; padding: 20px 0; border-bottom: 1px solid #e4eae5; }
+.expense-select { display: flex; align-items: center; justify-content: center; width: 44px; min-height: 44px; margin: 0; align-self: start; cursor: pointer; }
+.expense-select input { width: 22px; height: 22px; min-height: 22px; padding: 0; margin: 0; accent-color: #20634e; }
+.expense-details { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 14px; min-width: 0; }
+.expense:has(input:checked) .expense-details { background: #edf4ef; border-radius: 6px; }
 .expense:last-child { border-bottom: 0; padding-bottom: 0; }
 .expense-category, .expense-comment, .expense-amount { overflow-wrap: anywhere; min-width: 0; }
 .expense-amount { text-align: right; max-width: 210px; }
@@ -54,5 +64,5 @@ footer { text-align: center; font-size: 13px; padding: 6px 0 12px; }
   .card, .summary { padding: 20px 16px; border-radius: 16px; }
   .form-grid { grid-template-columns: 1fr; gap: 18px; }
   .form-footer .primary { width: 100%; }
-  .expense-amount { max-width: 150px; }
+  .expense-amount { max-width: 130px; }
 }

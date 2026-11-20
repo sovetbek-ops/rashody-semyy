@@ -9,6 +9,8 @@
   const end = byId("period-end");
   let expenses = [];
   let storageReadable = true;
+  let selectedExpense = null;
+  let savedSnapshot = null;
 
   function localDate(date = new Date()) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -51,6 +53,7 @@
   }
 
   function load() {
+    selectedExpense = null;
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       const saved = raw === null ? [] : JSON.parse(raw);
@@ -58,11 +61,12 @@
         throw new Error("Invalid saved data");
       }
       expenses = saved;
+      savedSnapshot = raw;
       storageReadable = true;
       storageError("");
     } catch {
       storageReadable = false;
-      storageError("Не удалось прочитать сохранённые траты. Добавление приостановлено, чтобы не потерять данные. Попробуйте обновить страницу.");
+      storageError("Не удалось прочитать сохранённые траты. Добавление и удаление приостановлены, чтобы не потерять данные. Попробуйте обновить страницу.");
     }
   }
 
@@ -77,6 +81,8 @@
     start.setAttribute("aria-invalid", String(Boolean(invalidPeriod)));
     end.setAttribute("aria-invalid", String(Boolean(invalidPeriod)));
     const visible = invalidPeriod ? [] : expenses.filter((item) => (!start.value || item.date >= start.value) && (!end.value || item.date <= end.value));
+    if (!visible.includes(selectedExpense)) selectedExpense = null;
+    byId("delete-expense").disabled = !selectedExpense || !storageReadable;
     byId("period-total").textContent = invalidPeriod ? "—" : money(total(visible));
     byId("expense-count").textContent = `Записей: ${visible.length}`;
     byId("empty-state").hidden = visible.length > 0 || Boolean(invalidPeriod);
@@ -85,6 +91,22 @@
     visible.forEach((item) => {
       const row = document.createElement("li");
       row.className = "expense";
+      const choice = document.createElement("label");
+      choice.className = "expense-select";
+      const radio = document.createElement("input");
+      radio.type = "radio";
+      radio.name = "selected-expense";
+      radio.checked = selectedExpense === item;
+      radio.disabled = !storageReadable;
+      radio.setAttribute("aria-label", `Выбрать трату: ${item.category}, ${money(item.amount)}, ${displayDate(item.date)}, запись ${expenses.indexOf(item) + 1}`);
+      radio.addEventListener("change", () => {
+        selectedExpense = item;
+        byId("delete-expense").disabled = false;
+        byId("delete-status").textContent = "";
+      });
+      choice.append(radio);
+      const details = document.createElement("div");
+      details.className = "expense-details";
       const category = document.createElement("strong");
       category.className = "expense-category";
       category.textContent = item.category;
@@ -95,13 +117,14 @@
       date.className = "expense-date";
       date.dateTime = item.date;
       date.textContent = displayDate(item.date);
-      row.append(category, amount, date);
+      details.append(category, amount, date);
       if (item.comment) {
         const comment = document.createElement("p");
         comment.className = "expense-comment";
         comment.textContent = item.comment;
-        row.append(comment);
+        details.append(comment);
       }
+      row.append(choice, details);
       fragment.append(row);
     });
     byId("expense-list").replaceChildren(fragment);
@@ -120,13 +143,17 @@
     if (invalid) { invalid.focus(); return; }
     if (!storageReadable) { load(); if (!storageReadable) return; }
     const next = [{ amount, category, date, comment: byId("comment").value.trim() }, ...expenses];
+    const serialized = JSON.stringify(next);
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      localStorage.setItem(STORAGE_KEY, serialized);
     } catch {
       storageError("Не удалось сохранить трату. Проверьте доступ к хранилищу браузера и попробуйте снова. Поля сохранены в форме.");
       return;
     }
     expenses = next;
+    savedSnapshot = serialized;
+    selectedExpense = null;
+    byId("delete-status").textContent = "";
     storageError("");
     byId("amount").value = "";
     byId("comment").value = "";
@@ -135,7 +162,45 @@
     byId("amount").focus();
   });
 
+  function deletionDataIsCurrent() {
+    try {
+      if (localStorage.getItem(STORAGE_KEY) === savedSnapshot) return true;
+      load();
+      render();
+      byId("delete-status").textContent = "Список изменился в другой вкладке. Выберите трату заново.";
+    } catch {
+      storageError("Не удалось проверить сохранённые траты. Ничего не удалено. Попробуйте снова.");
+    }
+    return false;
+  }
+
+  byId("delete-expense").addEventListener("click", () => {
+    const target = selectedExpense;
+    byId("delete-status").textContent = "";
+    if (!storageReadable || !target || !expenses.includes(target) || !deletionDataIsCurrent()) return;
+    const comment = target.comment ? `\n${target.comment}` : "";
+    if (!window.confirm(`Удалить трату?\n${money(target.amount)} · ${target.category}\n${displayDate(target.date)}${comment}\n\nВосстановить запись после удаления нельзя.`)) return;
+    if (!deletionDataIsCurrent() || selectedExpense !== target) return;
+    const next = expenses.filter((item) => item !== target);
+    const serialized = JSON.stringify(next);
+    try {
+      localStorage.setItem(STORAGE_KEY, serialized);
+    } catch {
+      storageError("Не удалось сохранить удаление. Трата осталась в списке. Попробуйте снова.");
+      return;
+    }
+    expenses = next;
+    savedSnapshot = serialized;
+    selectedExpense = null;
+    storageError("");
+    byId("save-status").textContent = "";
+    render();
+    byId("delete-status").textContent = "Трата удалена";
+  });
+
   function markPeriod(period) {
+    selectedExpense = null;
+    byId("delete-status").textContent = "";
     document.querySelectorAll("[data-period]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.period === period)));
   }
 
@@ -160,7 +225,11 @@
   });
   [start, end].forEach((input) => input.addEventListener("input", () => { markPeriod(""); render(); }));
   window.addEventListener("storage", (event) => {
-    if (event.key === STORAGE_KEY || event.key === null) { load(); render(); }
+    if (event.key === STORAGE_KEY || event.key === null) {
+      load();
+      byId("delete-status").textContent = "";
+      render();
+    }
   });
   window.addEventListener("focus", render);
   setInterval(render, 60000);
