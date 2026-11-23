@@ -11,6 +11,7 @@
   let storageReadable = true;
   let selectedExpense = null;
   let savedSnapshot = null;
+  let activePeriod = "all";
 
   function localDate(date = new Date()) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -72,6 +73,7 @@
 
   function render() {
     const now = new Date();
+    updateQuickPeriod(now);
     const month = localDate(now).slice(0, 7);
     byId("month-label").textContent = now.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
     byId("month-total").textContent = money(total(expenses.filter((item) => item.date.startsWith(`${month}-`))));
@@ -212,27 +214,35 @@
   });
 
   function markPeriod(period) {
+    activePeriod = period;
     selectedExpense = null;
     byId("delete-status").textContent = "";
     document.querySelectorAll("[data-period]").forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.period === period)));
   }
 
+  function updateQuickPeriod(now) {
+    if (!activePeriod || activePeriod === "all") return;
+    const first = new Date(now);
+    let periodEnd = localDate(now);
+    if (activePeriod === "month") {
+      first.setDate(1);
+      periodEnd = localDate(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+    } else {
+      first.setDate(first.getDate() - Number(activePeriod) + 1);
+    }
+    const periodStart = localDate(first);
+    if (start.value !== periodStart || end.value !== periodEnd) {
+      start.value = periodStart;
+      end.value = periodEnd;
+      markPeriod(activePeriod);
+    }
+  }
+
   document.querySelectorAll("[data-period]").forEach((button) => {
     button.addEventListener("click", () => {
       const period = button.dataset.period;
-      const today = new Date();
-      if (period === "all") { start.value = ""; end.value = ""; }
-      else {
-        end.value = localDate(today);
-        if (period === "month") {
-          start.value = `${localDate(today).slice(0, 7)}-01`;
-          end.value = localDate(new Date(today.getFullYear(), today.getMonth() + 1, 0));
-        } else {
-          today.setDate(today.getDate() - Number(period) + 1);
-          start.value = localDate(today);
-        }
-      }
       markPeriod(period);
+      if (period === "all") { start.value = ""; end.value = ""; }
       render();
     });
   });
@@ -245,6 +255,9 @@
     }
   });
   window.addEventListener("focus", render);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") render();
+  });
   setInterval(render, 60000);
   byId("date").value = localDate();
   load();
