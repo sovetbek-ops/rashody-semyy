@@ -25,7 +25,7 @@
       <form id="expense-form" novalidate>
         <div class="form-grid">
           <div class="field"><label for="amount">Сумма, ₸</label><input id="amount" name="amount" type="text" inputmode="numeric" placeholder="Например, 5 000" required aria-describedby="amount-error"><p id="amount-error" class="error" hidden></p></div>
-          <div class="field"><label for="category">Категория</label><select id="category" name="category" required aria-describedby="category-error"><option value="Еда">Еда</option><option value="Транспорт">Транспорт</option><option value="Дом">Дом</option><option value="Другое">Другое</option><option value="Кредит">Кредит</option><option value="Ипотека">Ипотека</option><option value="Расходы на секцию ребёнка">Расходы на секцию ребёнка</option></select><p id="category-error" class="error" hidden></p></div>
+          <div class="field"><label for="category">Категория</label><select id="category" name="category" required aria-describedby="category-error"><option value="Продукты">Продукты</option><option value="Транспорт">Транспорт</option><option value="Кредит">Кредит</option><option value="Ипотека">Ипотека</option><option value="Расходы на секцию ребёнка">Расходы на секцию ребёнка</option></select><p id="category-error" class="error" hidden></p></div>
           <div class="field"><label for="date">Дата</label><input id="date" name="date" type="date" required aria-describedby="date-error"><p id="date-error" class="error" hidden></p></div>
           <div class="field"><label for="comment">Комментарий <span>необязательно</span></label><input id="comment" name="comment" type="text" placeholder="На что потратили"></div>
         </div>
@@ -44,7 +44,7 @@
           <div><dt>Потрачено за месяц</dt><dd id="budget-spent">0 ₸</dd></div>
           <div><dt>Осталось</dt><dd id="budget-remaining">—</dd></div>
         </dl>
-        <p id="budget-limit-count" class="budget-note">Лимиты заданы: 0 из 7</p>
+        <p id="budget-limit-count" class="budget-note">Лимиты заданы: 0 из 5</p>
         <p class="budget-note">В расходах учтены все категории, включая категории без лимита.</p>
         <p id="budget-warning" class="budget-warning" role="status" hidden></p>
       </div>

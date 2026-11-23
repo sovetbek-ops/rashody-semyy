@@ -3,7 +3,9 @@
 (() => {
   const STORAGE_KEY = "family-expenses-v1";
   const BUDGET_KEY = "family-budgets-v1";
-  const categories = ["Еда", "Транспорт", "Дом", "Другое", "Кредит", "Ипотека", "Расходы на секцию ребёнка"];
+  const categories = ["Продукты", "Транспорт", "Кредит", "Ипотека", "Расходы на секцию ребёнка"];
+  const removedCategories = ["Дом", "Другое"];
+  const savedCategories = [...categories, "Еда", ...removedCategories];
   const byId = (id) => document.getElementById(id);
   const form = byId("expense-form");
   const start = byId("period-start");
@@ -68,10 +70,22 @@
     const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
     if (!isObject(saved) || !Object.entries(saved).every(([month, limits]) =>
       /^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(month) && isObject(limits) &&
-      Object.entries(limits).every(([category, amount]) => categories.includes(category) && Number.isSafeInteger(amount) && amount > 0))) {
+      Object.entries(limits).every(([category, amount]) => savedCategories.includes(category) && Number.isSafeInteger(amount) && amount > 0))) {
       throw new Error("Invalid saved budgets");
     }
-    return saved;
+    const updated = {};
+    Object.entries(saved).forEach(([month, limits]) => {
+      const next = { ...limits };
+      // A newer Products limit takes precedence if both names are present.
+      if (next["Еда"] !== undefined && next["Продукты"] === undefined) next["Продукты"] = next["Еда"];
+      delete next["Еда"];
+      removedCategories.forEach((category) => delete next[category]);
+      if (Object.keys(next).length) updated[month] = next;
+    });
+    if (JSON.stringify(updated) !== JSON.stringify(saved)) {
+      localStorage.setItem(BUDGET_KEY, JSON.stringify(updated));
+    }
+    return updated;
   }
 
   function loadBudgets() {
@@ -81,7 +95,7 @@
       budgetError("");
     } catch {
       budgetsReadable = false;
-      budgetError("Не удалось прочитать лимиты. Сохранённые данные не изменены. Попробуйте обновить страницу.");
+      budgetError("Не удалось прочитать или обновить лимиты. Сохранённые данные не изменены. Попробуйте обновить страницу.");
     }
   }
 
@@ -237,18 +251,25 @@
   function load() {
     selectedExpense = null;
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      let raw = localStorage.getItem(STORAGE_KEY);
       const saved = raw === null ? [] : JSON.parse(raw);
-      if (!Array.isArray(saved) || !saved.every((item) => item && Number.isSafeInteger(item.amount) && item.amount > 0 && categories.includes(item.category) && validDate(item.date) && typeof item.comment === "string")) {
+      if (!Array.isArray(saved) || !saved.every((item) => item && Number.isSafeInteger(item.amount) && item.amount > 0 && savedCategories.includes(item.category) && validDate(item.date) && typeof item.comment === "string")) {
         throw new Error("Invalid saved data");
       }
-      expenses = saved;
+      const updated = saved.filter((item) => !removedCategories.includes(item.category))
+        .map((item) => item.category === "Еда" ? { ...item, category: "Продукты" } : item);
+      if (saved.some((item) => item.category === "Еда" || removedCategories.includes(item.category))) {
+        const serialized = JSON.stringify(updated);
+        localStorage.setItem(STORAGE_KEY, serialized);
+        raw = serialized;
+      }
+      expenses = updated;
       savedSnapshot = raw;
       storageReadable = true;
       storageError("");
     } catch {
       storageReadable = false;
-      storageError("Не удалось прочитать сохранённые траты. Добавление и удаление приостановлены, чтобы не потерять данные. Попробуйте обновить страницу.");
+      storageError("Не удалось прочитать или обновить сохранённые траты. Добавление и удаление приостановлены, чтобы не потерять данные. Попробуйте обновить страницу.");
     }
   }
 

@@ -99,10 +99,8 @@ button:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
 .expense-category { position: relative; padding-left: 46px; min-height: 38px; display: flex; align-items: center; font-weight: 650; }
 /* Decorative icons use the existing category label; saved data and JS stay unchanged. */
 .expense-category::before { content: var(--category-icon, "📦") / ""; position: absolute; left: 0; top: 0; display: grid; place-items: center; width: 36px; height: 36px; font-size: 20px; font-weight: 400; background: var(--category-color, var(--peach)); border-radius: 12px; }
-.expense:has(input[aria-label^="Выбрать трату: Еда,"]) { --category-icon: "🍎"; --category-color: var(--peach); }
+.expense:has(input[aria-label^="Выбрать трату: Продукты,"]) { --category-icon: "🍎"; --category-color: var(--peach); }
 .expense:has(input[aria-label^="Выбрать трату: Транспорт,"]) { --category-icon: "🚌"; --category-color: var(--blue); }
-.expense:has(input[aria-label^="Выбрать трату: Дом,"]) { --category-icon: "🏠"; --category-color: var(--sage); }
-.expense:has(input[aria-label^="Выбрать трату: Другое,"]) { --category-icon: "📦"; --category-color: var(--peach); }
 .expense:has(input[aria-label^="Выбрать трату: Кредит,"]) { --category-icon: "💳"; --category-color: var(--blue); }
 .expense:has(input[aria-label^="Выбрать трату: Ипотека,"]) { --category-icon: "🔑"; --category-color: var(--peach); }
 .expense:has(input[aria-label^="Выбрать трату: Расходы на секцию ребёнка,"]) { --category-icon: "⚽"; --category-color: var(--sage); }
