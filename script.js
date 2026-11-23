@@ -2,6 +2,7 @@
 
 (() => {
   const STORAGE_KEY = "family-expenses-v1";
+  const BUDGET_KEY = "family-budgets-v1";
   const categories = ["Еда", "Транспорт", "Дом", "Другое", "Кредит", "Ипотека", "Расходы на секцию ребёнка"];
   const byId = (id) => document.getElementById(id);
   const form = byId("expense-form");
@@ -12,6 +13,9 @@
   let selectedExpense = null;
   let savedSnapshot = null;
   let activePeriod = "all";
+  let budgets = {};
+  let budgetsReadable = true;
+  let budgetMonth = "";
 
   function localDate(date = new Date()) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -53,6 +57,144 @@
     byId("storage-error").hidden = !message;
   }
 
+  function budgetError(message) {
+    byId("budget-error").textContent = message;
+    byId("budget-error").hidden = !message;
+  }
+
+  function readBudgets() {
+    const raw = localStorage.getItem(BUDGET_KEY);
+    const saved = raw === null ? {} : JSON.parse(raw);
+    const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+    if (!isObject(saved) || !Object.entries(saved).every(([month, limits]) =>
+      /^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(month) && isObject(limits) &&
+      Object.entries(limits).every(([category, amount]) => categories.includes(category) && Number.isSafeInteger(amount) && amount > 0))) {
+      throw new Error("Invalid saved budgets");
+    }
+    return saved;
+  }
+
+  function loadBudgets() {
+    try {
+      budgets = readBudgets();
+      budgetsReadable = true;
+      budgetError("");
+    } catch {
+      budgetsReadable = false;
+      budgetError("Не удалось прочитать лимиты. Сохранённые данные не изменены. Попробуйте обновить страницу.");
+    }
+  }
+
+  function changeBudget(category, index, remove) {
+    const now = new Date();
+    if (localDate(now).slice(0, 7) !== budgetMonth) {
+      renderBudget(now);
+      budgetError("Начался новый месяц. Задайте лимит заново.");
+      return;
+    }
+    const input = byId(`budget-${index}`);
+    const status = byId(`budget-status-${index}`);
+    status.textContent = "";
+    const amount = remove ? null : parseAmount(input.value);
+    fieldError(`budget-${index}`, !remove && amount === null ? "Введите положительную целую сумму до 9 007 199 254 740 991 ₸." : "");
+    if (!remove && amount === null) { input.focus(); return; }
+    // Read the latest limits before writing so another category's changes are preserved.
+    let next;
+    try {
+      next = readBudgets();
+    } catch {
+      loadBudgets();
+      renderBudget(now);
+      return;
+    }
+    const limits = { ...(next[budgetMonth] || {}) };
+    if (remove) delete limits[category];
+    else limits[category] = amount;
+    if (Object.keys(limits).length) next[budgetMonth] = limits;
+    else delete next[budgetMonth];
+    try {
+      localStorage.setItem(BUDGET_KEY, JSON.stringify(next));
+    } catch {
+      budgetError("Не удалось сохранить лимит. Данные не изменены, введённая сумма оставлена в поле. Попробуйте снова.");
+      return;
+    }
+    budgets = next;
+    budgetsReadable = true;
+    budgetError("");
+    input.value = remove ? "" : String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    renderBudget(now);
+    status.textContent = remove ? "Лимит убран" : "Лимит сохранён";
+  }
+
+  function renderBudget(now, resetInputs = false) {
+    const month = localDate(now).slice(0, 7);
+    if (month !== budgetMonth) {
+      budgetMonth = month;
+      loadBudgets();
+      const fragment = document.createDocumentFragment();
+      categories.forEach((category, index) => {
+        const row = document.createElement("form");
+        row.className = "budget-category";
+        row.noValidate = true;
+        const heading = document.createElement("h3");
+        heading.id = `budget-heading-${index}`;
+        heading.textContent = category;
+        row.setAttribute("aria-labelledby", heading.id);
+        const saved = document.createElement("p");
+        saved.id = `budget-limit-${index}`;
+        saved.className = "budget-limit";
+        const controls = document.createElement("div");
+        controls.className = "budget-controls";
+        const field = document.createElement("div");
+        field.className = "field";
+        const label = document.createElement("label");
+        label.htmlFor = `budget-${index}`;
+        label.textContent = "Лимит, ₸";
+        const input = document.createElement("input");
+        input.id = `budget-${index}`;
+        input.type = "text";
+        input.inputMode = "numeric";
+        input.placeholder = "Например, 20 000";
+        input.setAttribute("aria-describedby", `budget-${index}-error`);
+        const error = document.createElement("p");
+        error.id = `budget-${index}-error`;
+        error.className = "error";
+        error.setAttribute("role", "alert");
+        error.hidden = true;
+        const save = document.createElement("button");
+        save.type = "submit";
+        save.textContent = "Сохранить";
+        const remove = document.createElement("button");
+        remove.id = `budget-remove-${index}`;
+        remove.type = "button";
+        remove.textContent = "Убрать лимит";
+        remove.addEventListener("click", () => changeBudget(category, index, true));
+        const status = document.createElement("p");
+        status.id = `budget-status-${index}`;
+        status.className = "budget-status";
+        status.setAttribute("role", "status");
+        field.append(label, input, error);
+        controls.append(field, save, remove);
+        row.append(heading, saved, controls, status);
+        row.addEventListener("submit", (event) => { event.preventDefault(); changeBudget(category, index, false); });
+        fragment.append(row);
+      });
+      byId("budget-categories").replaceChildren(fragment);
+      resetInputs = true;
+    }
+    byId("budget-month").textContent = now.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
+    categories.forEach((category, index) => {
+      const amount = budgets[budgetMonth]?.[category];
+      byId(`budget-limit-${index}`).textContent = !budgetsReadable ? "Лимит: —" : amount === undefined ? "Лимит: Не задан" : `Лимит: ${money(amount)}`;
+      byId(`budget-remove-${index}`).disabled = !budgetsReadable || amount === undefined;
+      if (resetInputs) {
+        byId(`budget-${index}`).value = budgetsReadable && amount !== undefined ? String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, " ") : "";
+        fieldError(`budget-${index}`, "");
+        byId(`budget-status-${index}`).textContent = "";
+      }
+    });
+  }
+
   function load() {
     selectedExpense = null;
     try {
@@ -73,6 +215,7 @@
 
   function render() {
     const now = new Date();
+    renderBudget(now);
     updateQuickPeriod(now);
     const month = localDate(now).slice(0, 7);
     byId("month-label").textContent = now.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
@@ -248,6 +391,10 @@
   });
   [start, end].forEach((input) => input.addEventListener("input", () => { markPeriod(""); render(); }));
   window.addEventListener("storage", (event) => {
+    if (event.key === BUDGET_KEY || event.key === null) {
+      loadBudgets();
+      renderBudget(new Date(), true);
+    }
     if (event.key === STORAGE_KEY || event.key === null) {
       load();
       byId("delete-status").textContent = "";

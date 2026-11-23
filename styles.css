@@ -110,6 +110,16 @@ button:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
 .expense-date { color: var(--muted); font-size: 13px; grid-column: 1 / -1; }
 .expense-comment { grid-column: 1 / -1; color: #526357; margin: 4px 0 0; white-space: pre-wrap; font-size: 14px; }
 footer { text-align: center; font-size: 13px; padding: 4px 0 12px; }
+.budget-note { color: var(--muted); margin: 8px 0 16px; font-size: 14px; }
+.budget-category { min-width: 0; border-top: 1px solid var(--border); padding: 18px 0; }
+.budget-category:last-child { padding-bottom: 0; }
+.budget-category h3 { margin: 0 0 8px; font-size: 17px; overflow-wrap: anywhere; }
+.budget-limit { margin: 0 0 12px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.budget-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
+.budget-controls .field { flex: 1 1 200px; }
+.budget-controls button { max-width: 100%; overflow-wrap: anywhere; }
+.budget-status { color: var(--green); font-size: 14px; margin: 8px 0 0; }
+.budget-status:empty { display: none; }
 [hidden] { display: none !important; }
 @media (max-width: 600px) {
   main { padding: 28px 16px 20px; }

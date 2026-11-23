@@ -32,6 +32,13 @@
         <div class="form-footer"><button class="primary" type="submit">Добавить</button><p id="save-status" role="status"></p></div>
       </form>
     </section>
+    <section class="card" aria-labelledby="budget-heading">
+      <h2 id="budget-heading">Бюджет месяца</h2>
+      <p id="budget-month" class="budget-note"></p>
+      <p class="budget-note">Задайте лимиты на этот месяц. В новом месяце их нужно задать заново.</p>
+      <p id="budget-error" class="error" role="alert" hidden></p>
+      <div id="budget-categories"></div>
+    </section>
     <section class="card" aria-labelledby="list-heading">
       <div class="section-heading"><h2 id="list-heading"><span class="heading-icon" aria-hidden="true">≡</span>Список трат</h2><span id="expense-count"></span></div>
       <fieldset>
