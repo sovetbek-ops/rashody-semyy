@@ -111,6 +111,11 @@ button:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
 .expense-comment { grid-column: 1 / -1; color: #526357; margin: 4px 0 0; white-space: pre-wrap; font-size: 14px; }
 footer { text-align: center; font-size: 13px; padding: 4px 0 12px; }
 .budget-note { color: var(--muted); margin: 8px 0 16px; font-size: 14px; }
+.budget-summary { margin: 20px 0; padding: 16px; border: 1px solid #ccdcbc; border-radius: 18px; background: var(--sage); }
+.budget-totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 16px; margin: 0 0 16px; }
+.budget-totals > div { min-width: 0; }
+.budget-totals dt { font-size: 14px; }
+.budget-totals dd { margin: 4px 0 0; font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .budget-category { min-width: 0; border-top: 1px solid var(--border); padding: 18px 0; }
 .budget-category:last-child { padding-bottom: 0; }
 .budget-category h3 { margin: 0 0 8px; font-size: 17px; overflow-wrap: anywhere; }

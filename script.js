@@ -204,6 +204,17 @@
     }
     byId("budget-expenses-error").textContent = storageReadable ? "" : "Не удалось прочитать траты. Потраченные суммы и остатки пока недоступны.";
     byId("budget-expenses-error").hidden = storageReadable;
+    const limits = Object.values(budgets[budgetMonth] || {});
+    const budgetTotal = limits.reduce((sum, amount) => sum + BigInt(amount), 0n);
+    const spentTotal = [...spentByCategory.values()].reduce((sum, amount) => sum + amount, 0n);
+    const remainingTotal = storageReadable && budgetsReadable && limits.length ? budgetTotal - spentTotal : null;
+    byId("budget-total").textContent = !budgetsReadable ? "—" : limits.length ? money(budgetTotal) : "Не задан";
+    byId("budget-spent").textContent = storageReadable ? money(spentTotal) : "—";
+    byId("budget-remaining").textContent = remainingTotal === null ? "—" : remainingTotal < 0n ? `−${money(-remainingTotal)}` : money(remainingTotal);
+    byId("budget-limit-count").textContent = `Лимиты заданы: ${budgetsReadable ? limits.length : "—"} из ${categories.length}`;
+    const totalWarning = byId("budget-warning");
+    totalWarning.textContent = remainingTotal !== null && remainingTotal < 0n ? `Перерасход бюджета: ${money(-remainingTotal)}` : "";
+    totalWarning.hidden = !totalWarning.textContent;
     categories.forEach((category, index) => {
       const amount = budgets[budgetMonth]?.[category];
       byId(`budget-limit-${index}`).textContent = !budgetsReadable ? "Лимит: —" : amount === undefined ? "Лимит не задан" : `Лимит: ${money(amount)}`;

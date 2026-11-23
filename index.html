@@ -38,6 +38,16 @@
       <p class="budget-note">Задайте лимиты на этот месяц. В новом месяце их нужно задать заново.</p>
       <p id="budget-error" class="error" role="alert" hidden></p>
       <p id="budget-expenses-error" class="error" role="alert" hidden></p>
+      <div class="budget-summary" aria-label="Итоги бюджета месяца">
+        <dl class="budget-totals">
+          <div><dt>Общий бюджет</dt><dd id="budget-total">Не задан</dd></div>
+          <div><dt>Потрачено за месяц</dt><dd id="budget-spent">0 ₸</dd></div>
+          <div><dt>Осталось</dt><dd id="budget-remaining">—</dd></div>
+        </dl>
+        <p id="budget-limit-count" class="budget-note">Лимиты заданы: 0 из 7</p>
+        <p class="budget-note">В расходах учтены все категории, включая категории без лимита.</p>
+        <p id="budget-warning" class="budget-warning" role="status" hidden></p>
+      </div>
       <div id="budget-categories"></div>
     </section>
     <section class="card" aria-labelledby="list-heading">
