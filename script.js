@@ -84,6 +84,19 @@
     if (!visible.includes(selectedExpense)) selectedExpense = null;
     byId("delete-expense").disabled = !selectedExpense || !storageReadable;
     byId("period-total").textContent = invalidPeriod ? "—" : money(total(visible));
+    const categoryTotals = new Map(categories.map((category) => [category, 0n]));
+    visible.forEach((item) => categoryTotals.set(item.category, categoryTotals.get(item.category) + BigInt(item.amount)));
+    const categoryFragment = document.createDocumentFragment();
+    categories.forEach((category) => {
+      const row = document.createElement("div");
+      const name = document.createElement("dt");
+      name.textContent = category;
+      const amount = document.createElement("dd");
+      amount.textContent = invalidPeriod ? "—" : money(categoryTotals.get(category));
+      row.append(name, amount);
+      categoryFragment.append(row);
+    });
+    byId("category-totals").replaceChildren(categoryFragment);
     byId("expense-count").textContent = `Записей: ${visible.length}`;
     byId("empty-state").hidden = visible.length > 0 || Boolean(invalidPeriod);
     byId("empty-state").textContent = expenses.length ? "За этот период трат нет" : "Пока нет трат";

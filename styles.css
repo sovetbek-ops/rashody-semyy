@@ -79,6 +79,13 @@ button:disabled { opacity: .55; cursor: not-allowed; box-shadow: none; }
 #delete-hint { color: var(--muted); font-size: 13px; margin: 12px 0 0; }
 #delete-status { font-size: 14px; color: var(--green); margin: 10px 0 0; }
 #delete-status:empty { display: none; }
+.category-summary { margin-top: 24px; padding: 18px; border: 1px solid var(--border); border-radius: 18px; background: #f8f5ee; }
+.category-summary h3 { margin: 0; font-size: 18px; line-height: 1.4; }
+#category-period { margin: 4px 0 14px; color: var(--muted); font-size: 14px; }
+#category-totals { margin: 0; }
+#category-totals > div { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; gap: 8px 20px; padding: 10px 0; border-top: 1px solid var(--border); }
+#category-totals dt, #category-totals dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+#category-totals dd { text-align: right; font-weight: 650; font-variant-numeric: tabular-nums; }
 #empty-state { color: var(--muted); background: #f8f5ee; border: 1px dashed #b8bdad; border-radius: 16px; text-align: center; padding: 28px 16px; margin: 24px 0 0; }
 #expense-list { list-style: none; padding: 0; margin: 16px 0 0; }
 .expense { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 8px; padding: 16px 8px 16px 0; border-bottom: 1px solid var(--border); border-radius: 14px; }
@@ -118,6 +125,9 @@ footer { text-align: center; font-size: 13px; padding: 4px 0 12px; }
   .period-dates { gap: 10px; }
   .period-dates input { padding-inline: 8px; }
   .period-total > span { flex-basis: 100%; }
+  .category-summary { padding: 14px; }
+  #category-totals > div { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  #category-totals dd { text-align: left; }
   .expense-details { grid-template-columns: minmax(0, 1fr); gap: 6px; }
   .expense-amount { grid-row: 2; text-align: left; padding: 0; max-width: 100%; }
   .expense-category { font-size: 15px; }

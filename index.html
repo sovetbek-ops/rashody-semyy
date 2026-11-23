@@ -43,6 +43,11 @@
       <div class="period-total"><span>Итого за период</span><strong id="period-total" aria-live="polite">0 ₸</strong><button id="delete-expense" type="button" disabled aria-describedby="delete-hint">Удалить</button></div>
       <p id="delete-hint">Выберите одну трату в списке, чтобы удалить её.</p>
       <p id="delete-status" role="status"></p>
+      <section class="category-summary" aria-labelledby="category-heading" aria-describedby="category-period">
+        <h3 id="category-heading">По категориям</h3>
+        <p id="category-period">За выбранный период</p>
+        <dl id="category-totals"></dl>
+      </section>
       <p id="empty-state">Пока нет трат</p>
       <ul id="expense-list" aria-label="Траты"></ul>
     </section>
