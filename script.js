@@ -143,6 +143,17 @@
         const saved = document.createElement("p");
         saved.id = `budget-limit-${index}`;
         saved.className = "budget-limit";
+        const spent = document.createElement("p");
+        spent.id = `budget-spent-${index}`;
+        spent.className = "budget-amount";
+        const remaining = document.createElement("p");
+        remaining.id = `budget-remaining-${index}`;
+        remaining.className = "budget-amount";
+        const warning = document.createElement("p");
+        warning.id = `budget-warning-${index}`;
+        warning.className = "budget-warning";
+        warning.setAttribute("role", "status");
+        warning.hidden = true;
         const controls = document.createElement("div");
         controls.className = "budget-controls";
         const field = document.createElement("div");
@@ -175,7 +186,7 @@
         status.setAttribute("role", "status");
         field.append(label, input, error);
         controls.append(field, save, remove);
-        row.append(heading, saved, controls, status);
+        row.append(heading, saved, spent, remaining, warning, controls, status);
         row.addEventListener("submit", (event) => { event.preventDefault(); changeBudget(category, index, false); });
         fragment.append(row);
       });
@@ -183,9 +194,26 @@
       resetInputs = true;
     }
     byId("budget-month").textContent = now.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
+    const spentByCategory = new Map(categories.map((category) => [category, 0n]));
+    if (storageReadable) {
+      expenses.forEach((item) => {
+        if (item.date.startsWith(`${month}-`)) {
+          spentByCategory.set(item.category, spentByCategory.get(item.category) + BigInt(item.amount));
+        }
+      });
+    }
+    byId("budget-expenses-error").textContent = storageReadable ? "" : "Не удалось прочитать траты. Потраченные суммы и остатки пока недоступны.";
+    byId("budget-expenses-error").hidden = storageReadable;
     categories.forEach((category, index) => {
       const amount = budgets[budgetMonth]?.[category];
-      byId(`budget-limit-${index}`).textContent = !budgetsReadable ? "Лимит: —" : amount === undefined ? "Лимит: Не задан" : `Лимит: ${money(amount)}`;
+      byId(`budget-limit-${index}`).textContent = !budgetsReadable ? "Лимит: —" : amount === undefined ? "Лимит не задан" : `Лимит: ${money(amount)}`;
+      const spent = spentByCategory.get(category);
+      const remaining = storageReadable && budgetsReadable && amount !== undefined ? BigInt(amount) - spent : null;
+      byId(`budget-spent-${index}`).textContent = `Потрачено: ${storageReadable ? money(spent) : "—"}`;
+      byId(`budget-remaining-${index}`).textContent = `Осталось: ${remaining === null ? "—" : remaining < 0n ? `−${money(-remaining)}` : money(remaining)}`;
+      const warning = byId(`budget-warning-${index}`);
+      warning.textContent = remaining !== null && remaining < 0n ? `Перерасход: ${money(-remaining)}` : "";
+      warning.hidden = !warning.textContent;
       byId(`budget-remove-${index}`).disabled = !budgetsReadable || amount === undefined;
       if (resetInputs) {
         byId(`budget-${index}`).value = budgetsReadable && amount !== undefined ? String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, " ") : "";

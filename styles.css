@@ -115,6 +115,9 @@ footer { text-align: center; font-size: 13px; padding: 4px 0 12px; }
 .budget-category:last-child { padding-bottom: 0; }
 .budget-category h3 { margin: 0 0 8px; font-size: 17px; overflow-wrap: anywhere; }
 .budget-limit { margin: 0 0 12px; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.budget-amount { margin: 6px 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.budget-warning { margin: 10px 0; padding: 10px 12px; border: 1px solid #ad7766; border-radius: 12px; background: #fff0e9; color: #963b30; font-weight: 650; overflow-wrap: anywhere; }
+.budget-category .budget-controls { margin-top: 16px; }
 .budget-controls { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; }
 .budget-controls .field { flex: 1 1 200px; }
 .budget-controls button { max-width: 100%; overflow-wrap: anywhere; }
