@@ -18,6 +18,12 @@
   let budgets = {};
   let budgetsReadable = true;
   let budgetMonth = "";
+  let expenseWritePending = false;
+  let dateEdited = false;
+  const dirtyBudgetInputs = new Set();
+  let renderedExpenses = [];
+  let renderedSelection = null;
+  let renderedStorageReadable = true;
 
   function localDate(date = new Date()) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -136,6 +142,7 @@
     budgetsReadable = true;
     budgetError("");
     input.value = remove ? "" : String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    dirtyBudgetInputs.delete(index);
     renderBudget(now);
     status.textContent = remove ? "Лимит убран" : "Лимит сохранён";
   }
@@ -143,6 +150,7 @@
   function renderBudget(now, resetInputs = false) {
     const month = localDate(now).slice(0, 7);
     if (month !== budgetMonth) {
+      dirtyBudgetInputs.clear();
       budgetMonth = month;
       loadBudgets();
       const fragment = document.createDocumentFragment();
@@ -181,6 +189,7 @@
         input.inputMode = "numeric";
         input.placeholder = "Например, 20 000";
         input.setAttribute("aria-describedby", `budget-${index}-error`);
+        input.addEventListener("input", () => dirtyBudgetInputs.add(index));
         const error = document.createElement("p");
         error.id = `budget-${index}-error`;
         error.className = "error";
@@ -240,7 +249,7 @@
       warning.textContent = remaining !== null && remaining < 0n ? `Перерасход: ${money(-remaining)}` : "";
       warning.hidden = !warning.textContent;
       byId(`budget-remove-${index}`).disabled = !budgetsReadable || amount === undefined;
-      if (resetInputs) {
+      if (resetInputs && !dirtyBudgetInputs.has(index)) {
         byId(`budget-${index}`).value = budgetsReadable && amount !== undefined ? String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, " ") : "";
         fieldError(`budget-${index}`, "");
         byId(`budget-status-${index}`).textContent = "";
@@ -275,20 +284,21 @@
 
   function render() {
     const now = new Date();
+    if (!dateEdited) byId("date").value = localDate(now);
     renderBudget(now);
     updateQuickPeriod(now);
     const month = localDate(now).slice(0, 7);
     byId("month-label").textContent = now.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
-    byId("month-total").textContent = money(total(expenses.filter((item) => item.date.startsWith(`${month}-`))));
+    byId("month-total").textContent = storageReadable ? money(total(expenses.filter((item) => item.date.startsWith(`${month}-`)))) : "—";
     const invalidPeriod = (start.value && !validDate(start.value)) || (end.value && !validDate(end.value)) || (start.value && end.value && start.value > end.value);
     byId("period-error").textContent = invalidPeriod ? "Проверьте период: дата «С» должна быть не позже даты «По»." : "";
     byId("period-error").hidden = !invalidPeriod;
     start.setAttribute("aria-invalid", String(Boolean(invalidPeriod)));
     end.setAttribute("aria-invalid", String(Boolean(invalidPeriod)));
-    const visible = invalidPeriod ? [] : expenses.filter((item) => (!start.value || item.date >= start.value) && (!end.value || item.date <= end.value));
+    const visible = invalidPeriod || !storageReadable ? [] : expenses.filter((item) => (!start.value || item.date >= start.value) && (!end.value || item.date <= end.value));
     if (!visible.includes(selectedExpense)) selectedExpense = null;
     byId("delete-expense").disabled = !selectedExpense || !storageReadable;
-    byId("period-total").textContent = invalidPeriod ? "—" : money(total(visible));
+    byId("period-total").textContent = invalidPeriod || !storageReadable ? "—" : money(total(visible));
     const categoryTotals = new Map(categories.map((category) => [category, 0n]));
     visible.forEach((item) => categoryTotals.set(item.category, categoryTotals.get(item.category) + BigInt(item.amount)));
     const categoryFragment = document.createDocumentFragment();
@@ -297,14 +307,17 @@
       const name = document.createElement("dt");
       name.textContent = category;
       const amount = document.createElement("dd");
-      amount.textContent = invalidPeriod ? "—" : money(categoryTotals.get(category));
+      amount.textContent = invalidPeriod || !storageReadable ? "—" : money(categoryTotals.get(category));
       row.append(name, amount);
       categoryFragment.append(row);
     });
     byId("category-totals").replaceChildren(categoryFragment);
-    byId("expense-count").textContent = `Записей: ${visible.length}`;
-    byId("empty-state").hidden = visible.length > 0 || Boolean(invalidPeriod);
+    byId("expense-count").textContent = `Записей: ${storageReadable ? visible.length : "—"}`;
+    byId("empty-state").hidden = !storageReadable || visible.length > 0 || Boolean(invalidPeriod);
     byId("empty-state").textContent = expenses.length ? "За этот период трат нет" : "Пока нет трат";
+    // Keep the actual controls (and keyboard focus) while the list is unchanged.
+    if (renderedStorageReadable === storageReadable && renderedSelection === selectedExpense &&
+      renderedExpenses.length === visible.length && renderedExpenses.every((item, index) => item === visible[index])) return;
     const fragment = document.createDocumentFragment();
     visible.forEach((item) => {
       const row = document.createElement("li");
@@ -319,6 +332,7 @@
       radio.setAttribute("aria-label", `Выбрать трату: ${item.category}, ${money(item.amount)}, ${displayDate(item.date)}, запись ${expenses.indexOf(item) + 1}`);
       radio.addEventListener("change", () => {
         selectedExpense = item;
+        renderedSelection = item;
         byId("delete-expense").disabled = false;
         byId("delete-status").textContent = "";
       });
@@ -346,10 +360,31 @@
       fragment.append(row);
     });
     byId("expense-list").replaceChildren(fragment);
+    renderedExpenses = visible;
+    renderedSelection = selectedExpense;
+    renderedStorageReadable = storageReadable;
+  }
+
+  async function changeExpenses(action) {
+    if (expenseWritePending) return;
+    expenseWritePending = true;
+    try {
+      if (typeof navigator !== "undefined" && navigator.locks?.request) {
+        await navigator.locks.request(STORAGE_KEY, action);
+      } else {
+        action();
+      }
+    } catch {
+      storageError("Не удалось обновить траты. Поля сохранены, попробуйте снова.");
+    } finally {
+      expenseWritePending = false;
+    }
   }
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
+    if (expenseWritePending) return;
+    if (!dateEdited) byId("date").value = localDate();
     byId("save-status").textContent = "";
     const amount = parseAmount(byId("amount").value);
     const category = byId("category").value;
@@ -359,25 +394,31 @@
     fieldError("date", validDate(date) ? "" : "Укажите корректную дату.");
     const invalid = form.querySelector('[aria-invalid="true"]');
     if (invalid) { invalid.focus(); return; }
-    if (!storageReadable) { load(); if (!storageReadable) return; }
-    const next = [{ amount, category, date, comment: byId("comment").value.trim() }, ...expenses];
-    const serialized = JSON.stringify(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, serialized);
-    } catch {
-      storageError("Не удалось сохранить трату. Проверьте доступ к хранилищу браузера и попробуйте снова. Поля сохранены в форме.");
-      return;
-    }
-    expenses = next;
-    savedSnapshot = serialized;
-    selectedExpense = null;
-    byId("delete-status").textContent = "";
-    storageError("");
-    byId("amount").value = "";
-    byId("comment").value = "";
-    render();
-    byId("save-status").textContent = "Трата добавлена";
-    byId("amount").focus();
+    const enteredAmount = byId("amount").value;
+    const enteredComment = byId("comment").value;
+    changeExpenses(() => {
+      // Read inside the lock: a storage event from another tab may still be queued.
+      load();
+      if (!storageReadable) { render(); return; }
+      const next = [{ amount, category, date, comment: enteredComment.trim() }, ...expenses];
+      const serialized = JSON.stringify(next);
+      try {
+        localStorage.setItem(STORAGE_KEY, serialized);
+      } catch {
+        storageError("Не удалось сохранить трату. Проверьте доступ к хранилищу браузера и попробуйте снова. Поля сохранены в форме.");
+        return;
+      }
+      expenses = next;
+      savedSnapshot = serialized;
+      selectedExpense = null;
+      byId("delete-status").textContent = "";
+      storageError("");
+      if (byId("amount").value === enteredAmount) byId("amount").value = "";
+      if (byId("comment").value === enteredComment) byId("comment").value = "";
+      render();
+      byId("save-status").textContent = "Трата добавлена";
+      byId("amount").focus();
+    });
   });
 
   function deletionDataIsCurrent() {
@@ -393,27 +434,30 @@
   }
 
   byId("delete-expense").addEventListener("click", () => {
+    if (expenseWritePending) return;
     const target = selectedExpense;
     byId("delete-status").textContent = "";
     if (!storageReadable || !target || !expenses.includes(target) || !deletionDataIsCurrent()) return;
     const comment = target.comment ? `\n${target.comment}` : "";
     if (!window.confirm(`Удалить трату?\n${money(target.amount)} · ${target.category}\n${displayDate(target.date)}${comment}\n\nВосстановить запись после удаления нельзя.`)) return;
-    if (!deletionDataIsCurrent() || selectedExpense !== target) return;
-    const next = expenses.filter((item) => item !== target);
-    const serialized = JSON.stringify(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, serialized);
-    } catch {
-      storageError("Не удалось сохранить удаление. Трата осталась в списке. Попробуйте снова.");
-      return;
-    }
-    expenses = next;
-    savedSnapshot = serialized;
-    selectedExpense = null;
-    storageError("");
-    byId("save-status").textContent = "";
-    render();
-    byId("delete-status").textContent = "Трата удалена";
+    changeExpenses(() => {
+      if (!deletionDataIsCurrent() || selectedExpense !== target) return;
+      const next = expenses.filter((item) => item !== target);
+      const serialized = JSON.stringify(next);
+      try {
+        localStorage.setItem(STORAGE_KEY, serialized);
+      } catch {
+        storageError("Не удалось сохранить удаление. Трата осталась в списке. Попробуйте снова.");
+        return;
+      }
+      expenses = next;
+      savedSnapshot = serialized;
+      selectedExpense = null;
+      storageError("");
+      byId("save-status").textContent = "";
+      render();
+      byId("delete-status").textContent = "Трата удалена";
+    });
   });
 
   function markPeriod(period) {
@@ -450,6 +494,7 @@
     });
   });
   [start, end].forEach((input) => input.addEventListener("input", () => { markPeriod(""); render(); }));
+  byId("date").addEventListener("input", () => { dateEdited = true; });
   window.addEventListener("storage", (event) => {
     if (event.key === BUDGET_KEY || event.key === null) {
       loadBudgets();
