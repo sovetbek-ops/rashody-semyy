@@ -150,6 +150,22 @@
             <div class="form-footer"><button id="save-goal" class="primary" type="submit">Создать</button><button id="cancel-goal" type="button">Отмена</button></div>
           </form>
         </section>
+        <section id="deposit-editor" class="card" aria-labelledby="deposit-heading" hidden>
+          <h2 id="deposit-heading">Пополнить накопления</h2>
+          <p id="deposit-goal-name" class="goal-description"></p>
+          <form id="deposit-form" novalidate>
+            <div class="field"><label for="deposit-amount">Сумма, ₸</label><input id="deposit-amount" type="text" inputmode="numeric" required aria-describedby="deposit-amount-error"><p id="deposit-amount-error" class="error" hidden></p></div>
+            <dl class="goal-values"><div><dt>Сейчас накоплено</dt><dd id="deposit-current">—</dd></div><div><dt>После пополнения</dt><dd id="deposit-next">—</dd></div></dl>
+            <p id="deposit-state" class="error" role="status"></p>
+            <div class="form-footer"><button id="save-deposit" class="primary" type="submit">Пополнить</button><button id="cancel-deposit" type="button">Отмена</button></div>
+          </form>
+        </section>
+        <section id="goal-history" class="card" aria-labelledby="history-heading" hidden>
+          <div class="section-heading"><h2 id="history-heading" tabindex="-1">История</h2><button id="close-history" type="button">Закрыть</button></div>
+          <p id="history-goal-name" class="goal-description"></p>
+          <p id="history-state" class="analytics-state"></p>
+          <ol id="history-list" class="history-list" aria-label="Операции цели"></ol>
+        </section>
         <p id="goals-state" class="analytics-state">Пока нет целей</p>
         <div id="goal-list" class="goal-list"></div>
       </section>

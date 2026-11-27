@@ -56,6 +56,8 @@
   let savingsWritePending = false;
   let renderedSavings = null;
   let renderedSavingsDay = "";
+  let depositGoalId = null;
+  let historyGoalId = null;
 
   function savingsError(message) {
     byId("savings-error").textContent = message;
@@ -76,8 +78,9 @@
         goal && uniqueId(goal.id) && typeof goal.name === "string" && goal.name.trim().length > 0 &&
         Array.from(goal.name).length <= 100 && typeof goal.description === "string" &&
         Array.from(goal.description).length <= 1000 && Number.isSafeInteger(goal.target) && goal.target > 0 &&
-        validDate(goal.date) && Array.isArray(goal.operations) && goal.operations.length <= 1 &&
-        goal.operations.every((operation) => operation && uniqueId(operation.id) && operation.type === "initial" &&
+        validDate(goal.date) && Array.isArray(goal.operations) &&
+        goal.operations.every((operation, index) => operation && uniqueId(operation.id) &&
+          (operation.type === "deposit" || (operation.type === "initial" && index === 0)) &&
           Number.isSafeInteger(operation.amount) && operation.amount > 0 && validDate(operation.date))
       )) throw new Error("Invalid savings data");
       // Preserve the rendered cards and focus when the stored document is unchanged.
@@ -95,6 +98,10 @@
     byId("create-goal").disabled = !savingsReadable || savingsWritePending;
     byId("save-goal").disabled = !savingsReadable || savingsWritePending;
     byId("cancel-goal").disabled = savingsWritePending;
+    byId("deposit-amount").disabled = savingsWritePending;
+    byId("cancel-deposit").disabled = savingsWritePending;
+    document.querySelectorAll("[data-savings-action]").forEach((button) => { button.disabled = savingsWritePending || !savingsReadable; });
+    renderSavingsDetails();
     const state = byId("goals-state");
     state.hidden = savingsReadable && savings.goals.length > 0;
     state.textContent = savingsReadable ? "Пока нет целей" : "Накопления недоступны: —";
@@ -160,12 +167,146 @@
         excess.textContent = `Сверх цели: ${money(balance - target)}`;
         card.append(excess);
       }
+      const actions = document.createElement("div");
+      actions.className = "goal-actions";
+      [["deposit", "Пополнить"], ["history", "История"]].forEach(([action, label]) => {
+        const button = document.createElement("button");
+        button.id = `${action}-${goal.id}`;
+        button.type = "button";
+        button.textContent = label;
+        button.setAttribute("data-savings-action", action);
+        button.setAttribute("aria-controls", action === "deposit" ? "deposit-editor" : "goal-history");
+        button.setAttribute("aria-label", `${label}: ${goal.name}`);
+        button.disabled = savingsWritePending;
+        button.addEventListener("click", () => {
+          if (!savingsReadable || savingsWritePending) return;
+          byId("goal-status").textContent = "";
+          if (action === "deposit") {
+            if (depositGoalId !== goal.id) {
+              byId("deposit-form").reset();
+              fieldError("deposit-amount", "");
+            }
+            depositGoalId = goal.id;
+            byId("deposit-editor").hidden = false;
+            renderSavingsDetails();
+            byId("deposit-amount").focus();
+          } else {
+            historyGoalId = goal.id;
+            byId("goal-history").hidden = false;
+            renderSavingsDetails();
+            byId("history-heading").focus();
+          }
+        });
+        actions.append(button);
+      });
+      card.append(actions);
       fragment.append(card);
     });
     byId("goal-list").replaceChildren(fragment);
   }
 
   const goalFields = ["goal-name", "goal-description", "goal-target", "goal-initial", "goal-date"];
+  function savingsId() {
+    return Array.from(crypto.getRandomValues(new Uint32Array(4)), (part) => part.toString(16).padStart(8, "0")).join("");
+  }
+
+  function goalBalance(goal) {
+    return goal.operations.reduce((sum, operation) => sum + BigInt(operation.amount), 0n);
+  }
+
+  function focusGoalAction(action, id) {
+    (byId(`${action}-${id}`) || byId("savings-heading")).focus();
+  }
+
+  function closeDeposit() {
+    const id = depositGoalId;
+    depositGoalId = null;
+    byId("deposit-editor").hidden = true;
+    byId("deposit-form").reset();
+    fieldError("deposit-amount", "");
+    return id;
+  }
+
+  function renderSavingsDetails() {
+    const depositGoal = savingsReadable ? savings.goals.find((goal) => goal.id === depositGoalId) : null;
+    byId("save-deposit").disabled = savingsWritePending || !depositGoal;
+    if (depositGoalId !== null) {
+      const amount = parseAmount(byId("deposit-amount").value);
+      byId("deposit-goal-name").textContent = depositGoal ? depositGoal.name : "Цель недоступна";
+      byId("deposit-current").textContent = depositGoal ? money(goalBalance(depositGoal)) : "—";
+      byId("deposit-next").textContent = depositGoal && amount !== null ? money(goalBalance(depositGoal) + BigInt(amount)) : "—";
+      byId("deposit-state").textContent = !savingsReadable ? "Не удалось прочитать накопления. Пополнение приостановлено." : !depositGoal ? "Цель удалена в другой вкладке. Пополнение не сохранено." : "";
+    }
+    if (historyGoalId !== null) {
+      const goal = savingsReadable ? savings.goals.find((item) => item.id === historyGoalId) : null;
+      byId("history-goal-name").textContent = goal ? goal.name : "Цель недоступна";
+      const state = byId("history-state");
+      state.hidden = Boolean(goal && goal.operations.length);
+      state.textContent = !savingsReadable ? "Не удалось прочитать историю: —" : !goal ? "Цель удалена в другой вкладке" : "Операций пока нет";
+      const fragment = document.createDocumentFragment();
+      let balance = 0n;
+      const rows = goal ? goal.operations.map((operation) => {
+        balance += BigInt(operation.amount);
+        const row = document.createElement("li");
+        row.className = "history-entry";
+        const date = document.createElement("time");
+        date.dateTime = operation.date;
+        date.textContent = displayDate(operation.date);
+        const amount = document.createElement("p");
+        amount.textContent = `${operation.type === "initial" ? "Начальная сумма" : "Пополнение"}: +${money(operation.amount)}`;
+        const remaining = document.createElement("p");
+        remaining.textContent = `Остаток: ${money(balance)}`;
+        row.append(date, amount, remaining);
+        return row;
+      }) : [];
+      rows.reverse().forEach((row) => fragment.append(row));
+      byId("history-list").replaceChildren(fragment);
+    }
+  }
+
+  byId("deposit-amount").addEventListener("input", renderSavingsDetails);
+  byId("cancel-deposit").addEventListener("click", () => {
+    if (!savingsWritePending) focusGoalAction("deposit", closeDeposit());
+  });
+  byId("close-history").addEventListener("click", () => {
+    const id = historyGoalId;
+    historyGoalId = null;
+    byId("goal-history").hidden = true;
+    focusGoalAction("history", id);
+  });
+  byId("deposit-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (savingsWritePending || depositGoalId === null) return;
+    byId("goal-status").textContent = "";
+    const amount = parseAmount(byId("deposit-amount").value);
+    fieldError("deposit-amount", amount === null ? "Введите целую сумму от 1 до 9 007 199 254 740 991 ₸." : "");
+    if (amount === null) { byId("deposit-amount").focus(); return; }
+    const id = depositGoalId;
+    let saved = false;
+    savingsWritePending = true;
+    renderSavings(new Date());
+    try {
+      const deposit = () => {
+        loadSavings();
+        if (!savingsReadable || !savings.goals.some((goal) => goal.id === id)) return;
+        const operation = { id: savingsId(), type: "deposit", amount, date: localDate() };
+        const next = { ...savings, goals: savings.goals.map((goal) => goal.id === id ? { ...goal, operations: [...goal.operations, operation] } : goal) };
+        localStorage.setItem(SAVINGS_KEY, JSON.stringify(next));
+        savings = next;
+        saved = true;
+        closeDeposit();
+        byId("goal-status").textContent = "Пополнение сохранено";
+      };
+      if (navigator.locks?.request) await navigator.locks.request(SAVINGS_KEY, deposit);
+      else deposit();
+    } catch {
+      savingsError("Не удалось сохранить пополнение. Введённая сумма оставлена, попробуйте снова.");
+    } finally {
+      savingsWritePending = false;
+      renderSavings(new Date());
+      if (saved) focusGoalAction("deposit", id);
+    }
+  });
   function closeGoalForm() {
     byId("goal-editor").hidden = true;
     byId("create-goal").setAttribute("aria-expanded", "false");
@@ -211,9 +352,8 @@
     const create = () => {
       loadSavings();
       if (!savingsReadable) return;
-      const newId = () => Array.from(crypto.getRandomValues(new Uint32Array(4)), (part) => part.toString(16).padStart(8, "0")).join("");
-      const operations = initial ? [{ id: newId(), type: "initial", amount: initial, date: localDate() }] : [];
-      const goal = { id: newId(), name, description, target, date, operations };
+      const operations = initial ? [{ id: savingsId(), type: "initial", amount: initial, date: localDate() }] : [];
+      const goal = { id: savingsId(), name, description, target, date, operations };
       const next = { version: 1, goals: [goal, ...savings.goals] };
       localStorage.setItem(SAVINGS_KEY, JSON.stringify(next));
       savings = next;
