@@ -212,6 +212,7 @@
         if (action === "delete") button.className = "danger";
         button.addEventListener("click", () => {
           if (!savingsReadable || savingsWritePending) return;
+          renderSavings(new Date());
           byId("goal-status").textContent = "";
           if (action === "deposit") {
             if (depositGoalId !== goal.id) {
@@ -643,6 +644,7 @@
   }
   byId("create-goal").addEventListener("click", () => {
     if (!savingsReadable || savingsWritePending) return;
+    renderSavings(new Date());
     byId("goal-status").textContent = "";
     byId("goal-editor").hidden = false;
     byId("create-goal").setAttribute("aria-expanded", "true");
