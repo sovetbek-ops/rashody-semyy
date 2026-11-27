@@ -7,6 +7,30 @@
   const removedCategories = ["Дом", "Другое"];
   const savedCategories = [...categories, "Еда", ...removedCategories];
   const byId = (id) => document.getElementById(id);
+  const views = {
+    overview: ["Обзор", "Расходы семьи за текущий месяц."],
+    expenses: ["Траты", "Записывайте расходы и выбирайте период просмотра."],
+    budget: ["Бюджет", "Планируйте расходы и следите за лимитами месяца."]
+  };
+
+  function showView(view, focusAmount = false) {
+    if (!views[view]) return;
+    Object.keys(views).forEach((name) => { byId(`view-${name}`).hidden = name !== view; });
+    document.querySelectorAll(".nav-button").forEach((button) => {
+      if (button.dataset.view === view) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
+    byId("page-title").textContent = views[view][0];
+    byId("page-description").textContent = views[view][1];
+    (focusAmount ? byId("amount") : byId("page-title")).focus();
+  }
+
+  document.querySelectorAll("[data-view]").forEach((button) => {
+    button.addEventListener("click", () => showView(button.dataset.view));
+  });
+  document.querySelectorAll("[data-open-expense]").forEach((button) => {
+    button.addEventListener("click", () => showView("expenses", true));
+  });
   const form = byId("expense-form");
   const start = byId("period-start");
   const end = byId("period-end");
@@ -290,6 +314,7 @@
     const month = localDate(now).slice(0, 7);
     byId("month-label").textContent = now.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
     byId("month-total").textContent = storageReadable ? money(total(expenses.filter((item) => item.date.startsWith(`${month}-`)))) : "—";
+    byId("expenses-month-total").textContent = byId("month-total").textContent;
     const invalidPeriod = (start.value && !validDate(start.value)) || (end.value && !validDate(end.value)) || (start.value && end.value && start.value > end.value);
     byId("period-error").textContent = invalidPeriod ? "Проверьте период: дата «С» должна быть не позже даты «По»." : "";
     byId("period-error").hidden = !invalidPeriod;

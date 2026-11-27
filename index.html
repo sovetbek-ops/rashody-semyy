@@ -8,68 +8,91 @@
   <script src="script.js" defer></script>
 </head>
 <body>
-  <main>
-    <header>
-      <span class="home-mark" aria-hidden="true">⌂</span>
-      <p class="eyebrow">СЕМЕЙНЫЙ БЮДЖЕТ</p>
-      <h1>Наши расходы</h1>
-      <p class="intro">Повседневные траты — в одном месте.</p>
-    </header>
-    <section class="summary" aria-labelledby="month-heading">
-      <div><h2 id="month-heading">За текущий месяц</h2><p id="month-label"></p></div>
-      <strong id="month-total" aria-live="polite">0 ₸</strong>
-    </section>
-    <p id="storage-error" class="error" role="alert" hidden></p>
-    <section class="card" aria-labelledby="form-heading">
-      <h2 id="form-heading"><span class="heading-icon" aria-hidden="true">+</span>Добавить трату</h2>
-      <form id="expense-form" novalidate>
-        <div class="form-grid">
-          <div class="field"><label for="amount">Сумма, ₸</label><input id="amount" name="amount" type="text" inputmode="numeric" placeholder="Например, 5 000" required aria-describedby="amount-error"><p id="amount-error" class="error" hidden></p></div>
-          <div class="field"><label for="category">Категория</label><select id="category" name="category" required aria-describedby="category-error"><option value="Продукты">Продукты</option><option value="Транспорт">Транспорт</option><option value="Кредит">Кредит</option><option value="Ипотека">Ипотека</option><option value="Расходы на секцию ребёнка">Расходы на секцию ребёнка</option></select><p id="category-error" class="error" hidden></p></div>
-          <div class="field"><label for="date">Дата</label><input id="date" name="date" type="date" required aria-describedby="date-error"><p id="date-error" class="error" hidden></p></div>
-          <div class="field"><label for="comment">Комментарий <span>необязательно</span></label><input id="comment" name="comment" type="text" placeholder="На что потратили"></div>
-        </div>
-        <div class="form-footer"><button class="primary" type="submit">Добавить</button><p id="save-status" role="status"></p></div>
-      </form>
-    </section>
-    <section class="card" aria-labelledby="budget-heading">
-      <h2 id="budget-heading">Бюджет месяца</h2>
-      <p id="budget-month" class="budget-note"></p>
-      <p class="budget-note">Задайте лимиты на этот месяц. В новом месяце их нужно задать заново.</p>
-      <p id="budget-error" class="error" role="alert" hidden></p>
-      <p id="budget-expenses-error" class="error" role="alert" hidden></p>
-      <div class="budget-summary" aria-label="Итоги бюджета месяца">
-        <dl class="budget-totals">
-          <div><dt>Общий бюджет</dt><dd id="budget-total">Не задан</dd></div>
-          <div><dt>Потрачено за месяц</dt><dd id="budget-spent">0 ₸</dd></div>
-          <div><dt>Осталось</dt><dd id="budget-remaining">—</dd></div>
-        </dl>
-        <p id="budget-limit-count" class="budget-note">Лимиты заданы: 0 из 5</p>
-        <p class="budget-note">В расходах учтены все категории, включая категории без лимита.</p>
-        <p id="budget-warning" class="budget-warning" role="status" hidden></p>
+  <a class="skip-link" href="#main-content">К содержимому</a>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Семейные расходы">
+      <div class="brand"><span class="brand-icon" aria-hidden="true">⌂</span><div>Семейные расходы<small>Всё важное — рядом</small></div></div>
+      <nav aria-label="Разделы приложения">
+        <button type="button" class="nav-button" data-view="overview" aria-controls="view-overview" aria-current="page"><span aria-hidden="true">◫</span>Обзор<span class="nav-current" aria-hidden="true">Выбран</span></button>
+        <button type="button" class="nav-button" data-view="expenses" aria-controls="view-expenses"><span aria-hidden="true">≡</span>Траты<span class="nav-current" aria-hidden="true">Выбран</span></button>
+        <button type="button" class="nav-button" data-view="budget" aria-controls="view-budget"><span aria-hidden="true">▤</span>Бюджет<span class="nav-current" aria-hidden="true">Выбран</span></button>
+      </nav>
+      <p class="sidebar-note">Ваш семейный бюджет.<br>На вашем устройстве.</p>
+    </aside>
+    <main id="main-content" tabindex="-1">
+      <header class="page-header">
+        <div><p class="eyebrow">СЕМЕЙНЫЕ ФИНАНСЫ</p><h1 id="page-title" tabindex="-1">Обзор</h1><p id="page-description" class="intro">Расходы семьи за текущий месяц.</p></div>
+        <button type="button" class="primary" data-open-expense><span aria-hidden="true">+</span> Добавить трату</button>
+      </header>
+      <div class="app-errors">
+        <p id="storage-error" class="error" role="alert" hidden></p>
+        <p id="budget-error" class="error" role="alert" hidden></p>
+        <p id="budget-expenses-error" class="error" role="alert" hidden></p>
       </div>
-      <div id="budget-categories"></div>
-    </section>
-    <section class="card" aria-labelledby="list-heading">
-      <div class="section-heading"><h2 id="list-heading"><span class="heading-icon" aria-hidden="true">≡</span>Список трат</h2><span id="expense-count"></span></div>
-      <fieldset>
-        <legend>Период</legend>
-        <div class="period-dates"><div class="field"><label for="period-start">С</label><input type="date" id="period-start" aria-describedby="period-error"></div><div class="field"><label for="period-end">По</label><input type="date" id="period-end" aria-describedby="period-error"></div></div>
-        <div class="shortcuts" aria-label="Быстрый выбор периода"><button type="button" data-period="1" aria-pressed="false">Сутки</button><button type="button" data-period="7" aria-pressed="false">7 дней</button><button type="button" data-period="14" aria-pressed="false">14 дней</button><button type="button" data-period="month" aria-pressed="false">Месяц</button><button type="button" data-period="all" aria-pressed="true">Все</button></div>
-        <p id="period-error" class="error" role="alert" hidden></p>
-      </fieldset>
-      <div class="period-total"><span>Итого за период</span><strong id="period-total" aria-live="polite">0 ₸</strong><button id="delete-expense" type="button" disabled aria-describedby="delete-hint">Удалить</button></div>
-      <p id="delete-hint">Выберите одну трату в списке, чтобы удалить её.</p>
-      <p id="delete-status" role="status"></p>
-      <section class="category-summary" aria-labelledby="category-heading" aria-describedby="category-period">
-        <h3 id="category-heading">По категориям</h3>
-        <p id="category-period">За выбранный период</p>
-        <dl id="category-totals"></dl>
+      <section id="view-overview" aria-label="Обзор">
+        <section class="summary" aria-labelledby="month-heading">
+          <div><p class="eyebrow">ТЕКУЩИЙ МЕСЯЦ</p><h2 id="month-heading">Потрачено за месяц</h2><p id="month-label"></p></div>
+          <strong id="month-total" aria-live="polite">0 ₸</strong>
+        </section>
+        <div class="overview-actions">
+          <button type="button" data-view="expenses" aria-controls="view-expenses">Все траты <span aria-hidden="true">→</span></button>
+          <button type="button" data-view="budget" aria-controls="view-budget">Настроить бюджет <span aria-hidden="true">→</span></button>
+        </div>
+      </section>
+      <section id="view-expenses" aria-label="Траты" hidden>
+        <div class="expense-month"><span>Потрачено за текущий месяц</span><strong id="expenses-month-total">0 ₸</strong></div>
+        <section class="card" aria-labelledby="form-heading">
+          <h2 id="form-heading"><span class="heading-icon" aria-hidden="true">+</span>Добавить трату</h2>
+          <form id="expense-form" novalidate>
+            <div class="form-grid">
+              <div class="field"><label for="amount">Сумма, ₸</label><input id="amount" name="amount" type="text" inputmode="numeric" placeholder="Например, 5 000" required aria-describedby="amount-error"><p id="amount-error" class="error" hidden></p></div>
+              <div class="field"><label for="category">Категория</label><select id="category" name="category" required aria-describedby="category-error"><option value="Продукты">Продукты</option><option value="Транспорт">Транспорт</option><option value="Кредит">Кредит</option><option value="Ипотека">Ипотека</option><option value="Расходы на секцию ребёнка">Расходы на секцию ребёнка</option></select><p id="category-error" class="error" hidden></p></div>
+              <div class="field"><label for="date">Дата</label><input id="date" name="date" type="date" required aria-describedby="date-error"><p id="date-error" class="error" hidden></p></div>
+              <div class="field"><label for="comment">Комментарий <span>необязательно</span></label><input id="comment" name="comment" type="text" placeholder="На что потратили"></div>
+            </div>
+            <div class="form-footer"><button class="primary" type="submit">Добавить</button><p id="save-status" role="status"></p></div>
+          </form>
+        </section>
+        <section class="card" aria-labelledby="list-heading">
+          <div class="section-heading"><h2 id="list-heading"><span class="heading-icon" aria-hidden="true">≡</span>Список трат</h2><span id="expense-count"></span></div>
+          <fieldset>
+            <legend>Период</legend>
+            <div class="period-dates"><div class="field"><label for="period-start">С</label><input type="date" id="period-start" aria-describedby="period-error"></div><div class="field"><label for="period-end">По</label><input type="date" id="period-end" aria-describedby="period-error"></div></div>
+            <div class="shortcuts" aria-label="Быстрый выбор периода"><button type="button" data-period="1" aria-pressed="false">Сутки</button><button type="button" data-period="7" aria-pressed="false">7 дней</button><button type="button" data-period="14" aria-pressed="false">14 дней</button><button type="button" data-period="month" aria-pressed="false">Месяц</button><button type="button" data-period="all" aria-pressed="true">Все</button></div>
+            <p id="period-error" class="error" role="alert" hidden></p>
+          </fieldset>
+          <div class="period-total"><span>Итого за период</span><strong id="period-total" aria-live="polite">0 ₸</strong><button id="delete-expense" type="button" disabled aria-describedby="delete-hint">Удалить</button></div>
+          <p id="delete-hint">Выберите одну трату в списке, чтобы удалить её.</p>
+          <p id="delete-status" role="status"></p>
+          <section class="category-summary" aria-labelledby="category-heading" aria-describedby="category-period">
+            <h3 id="category-heading">По категориям</h3>
+            <p id="category-period">За выбранный период</p>
+            <dl id="category-totals"></dl>
       </section>
       <p id="empty-state">Пока нет трат</p>
       <ul id="expense-list" aria-label="Траты"></ul>
     </section>
-    <footer>Данные хранятся только в этом браузере.</footer>
-  </main>
+      </section>
+      <section id="view-budget" aria-label="Бюджет" hidden>
+        <section class="card" aria-labelledby="budget-heading">
+          <h2 id="budget-heading">Бюджет месяца</h2>
+          <p id="budget-month" class="budget-note"></p>
+          <p class="budget-note">Задайте лимиты на этот месяц. В новом месяце их нужно задать заново.</p>
+          <div class="budget-summary" aria-label="Итоги бюджета месяца">
+            <dl class="budget-totals">
+              <div><dt>Общий бюджет</dt><dd id="budget-total">Не задан</dd></div>
+              <div><dt>Потрачено за месяц</dt><dd id="budget-spent">0 ₸</dd></div>
+              <div><dt>Осталось</dt><dd id="budget-remaining">—</dd></div>
+            </dl>
+            <p id="budget-limit-count" class="budget-note">Лимиты заданы: 0 из 5</p>
+            <p class="budget-note">В расходах учтены все категории, включая категории без лимита.</p>
+            <p id="budget-warning" class="budget-warning" role="status" hidden></p>
+          </div>
+          <div id="budget-categories"></div>
+        </section>
+      </section>
+      <footer>Данные хранятся только в этом браузере.</footer>
+    </main>
+  </div>
 </body>
 </html>
