@@ -58,6 +58,9 @@
   let renderedSavingsDay = "";
   let depositGoalId = null;
   let historyGoalId = null;
+  let withdrawGoalId = null;
+  let withdrawConfirmation = null;
+  let withdrawNotice = "";
 
   function savingsError(message) {
     byId("savings-error").textContent = message;
@@ -79,9 +82,7 @@
         Array.from(goal.name).length <= 100 && typeof goal.description === "string" &&
         Array.from(goal.description).length <= 1000 && Number.isSafeInteger(goal.target) && goal.target > 0 &&
         validDate(goal.date) && Array.isArray(goal.operations) &&
-        goal.operations.every((operation, index) => operation && uniqueId(operation.id) &&
-          (operation.type === "deposit" || (operation.type === "initial" && index === 0)) &&
-          Number.isSafeInteger(operation.amount) && operation.amount > 0 && validDate(operation.date))
+        validSavingsOperations(goal.operations, uniqueId)
       )) throw new Error("Invalid savings data");
       // Preserve the rendered cards and focus when the stored document is unchanged.
       if (!savingsReadable || JSON.stringify(savings) !== JSON.stringify(saved)) savings = saved;
@@ -93,6 +94,18 @@
     }
   }
 
+  function validSavingsOperations(operations, uniqueId) {
+    let balance = 0n;
+    return operations.every((operation, index) => {
+      if (!operation || !uniqueId(operation.id) ||
+        !["initial", "deposit", "withdraw"].includes(operation.type) ||
+        (operation.type === "initial" && index !== 0) ||
+        !Number.isSafeInteger(operation.amount) || operation.amount <= 0 || !validDate(operation.date)) return false;
+      balance += operation.type === "withdraw" ? -BigInt(operation.amount) : BigInt(operation.amount);
+      return operation.type !== "withdraw" || balance >= 0n || operation.confirmedNegative === true;
+    });
+  }
+
   function renderSavings(now) {
     goalFields.forEach((id) => { byId(id).disabled = savingsWritePending; });
     byId("create-goal").disabled = !savingsReadable || savingsWritePending;
@@ -100,6 +113,9 @@
     byId("cancel-goal").disabled = savingsWritePending;
     byId("deposit-amount").disabled = savingsWritePending;
     byId("cancel-deposit").disabled = savingsWritePending;
+    byId("cancel-withdraw").disabled = savingsWritePending;
+    byId("confirm-withdraw").disabled = savingsWritePending;
+    byId("cancel-withdraw-confirm").disabled = savingsWritePending;
     document.querySelectorAll("[data-savings-action]").forEach((button) => { button.disabled = savingsWritePending || !savingsReadable; });
     renderSavingsDetails();
     const state = byId("goals-state");
@@ -112,10 +128,10 @@
     renderedSavingsDay = today;
     const fragment = document.createDocumentFragment();
     if (savingsReadable) savings.goals.forEach((goal) => {
-      const balance = goal.operations.reduce((sum, operation) => sum + BigInt(operation.amount), 0n);
+      const balance = goalBalance(goal);
       const target = BigInt(goal.target);
       const remaining = balance >= target ? 0n : target - balance;
-      const tenths = balance >= target ? 1000n : balance * 1000n / target;
+      const tenths = balance <= 0n ? 0n : balance >= target ? 1000n : balance * 1000n / target;
       const percent = `${tenths / 10n}${tenths % 10n ? `,${tenths % 10n}` : ""}%`;
       const card = document.createElement("article");
       card.className = "card goal-card";
@@ -137,7 +153,7 @@
         const name = document.createElement("dt");
         name.textContent = label;
         const value = document.createElement("dd");
-        value.textContent = money(amount);
+        value.textContent = savingsMoney(amount);
         pair.append(name, value);
         values.append(pair);
       });
@@ -167,15 +183,21 @@
         excess.textContent = `Сверх цели: ${money(balance - target)}`;
         card.append(excess);
       }
+      if (balance < 0n) {
+        const negative = document.createElement("p");
+        negative.className = "goal-negative";
+        negative.textContent = `Отрицательный остаток: ${money(-balance)}`;
+        card.append(negative);
+      }
       const actions = document.createElement("div");
       actions.className = "goal-actions";
-      [["deposit", "Пополнить"], ["history", "История"]].forEach(([action, label]) => {
+      [["deposit", "Пополнить"], ["withdraw", "Снять"], ["history", "История"]].forEach(([action, label]) => {
         const button = document.createElement("button");
         button.id = `${action}-${goal.id}`;
         button.type = "button";
         button.textContent = label;
         button.setAttribute("data-savings-action", action);
-        button.setAttribute("aria-controls", action === "deposit" ? "deposit-editor" : "goal-history");
+        button.setAttribute("aria-controls", action === "history" ? "goal-history" : `${action}-editor`);
         button.setAttribute("aria-label", `${label}: ${goal.name}`);
         button.disabled = savingsWritePending;
         button.addEventListener("click", () => {
@@ -190,6 +212,17 @@
             byId("deposit-editor").hidden = false;
             renderSavingsDetails();
             byId("deposit-amount").focus();
+          } else if (action === "withdraw") {
+            if (withdrawGoalId !== goal.id) {
+              byId("withdraw-form").reset();
+              fieldError("withdraw-amount", "");
+              withdrawConfirmation = null;
+              withdrawNotice = "";
+            }
+            withdrawGoalId = goal.id;
+            byId("withdraw-editor").hidden = false;
+            renderSavingsDetails();
+            (withdrawConfirmation ? byId("cancel-withdraw-confirm") : byId("withdraw-amount")).focus();
           } else {
             historyGoalId = goal.id;
             byId("goal-history").hidden = false;
@@ -211,7 +244,11 @@
   }
 
   function goalBalance(goal) {
-    return goal.operations.reduce((sum, operation) => sum + BigInt(operation.amount), 0n);
+    return goal.operations.reduce((sum, operation) => sum + (operation.type === "withdraw" ? -BigInt(operation.amount) : BigInt(operation.amount)), 0n);
+  }
+
+  function savingsMoney(value) {
+    return value < 0n ? `−${money(-value)}` : money(value);
   }
 
   function focusGoalAction(action, id) {
@@ -233,10 +270,11 @@
     if (depositGoalId !== null) {
       const amount = parseAmount(byId("deposit-amount").value);
       byId("deposit-goal-name").textContent = depositGoal ? depositGoal.name : "Цель недоступна";
-      byId("deposit-current").textContent = depositGoal ? money(goalBalance(depositGoal)) : "—";
-      byId("deposit-next").textContent = depositGoal && amount !== null ? money(goalBalance(depositGoal) + BigInt(amount)) : "—";
+      byId("deposit-current").textContent = depositGoal ? savingsMoney(goalBalance(depositGoal)) : "—";
+      byId("deposit-next").textContent = depositGoal && amount !== null ? savingsMoney(goalBalance(depositGoal) + BigInt(amount)) : "—";
       byId("deposit-state").textContent = !savingsReadable ? "Не удалось прочитать накопления. Пополнение приостановлено." : !depositGoal ? "Цель удалена в другой вкладке. Пополнение не сохранено." : "";
     }
+    renderWithdrawal();
     if (historyGoalId !== null) {
       const goal = savingsReadable ? savings.goals.find((item) => item.id === historyGoalId) : null;
       byId("history-goal-name").textContent = goal ? goal.name : "Цель недоступна";
@@ -246,17 +284,23 @@
       const fragment = document.createDocumentFragment();
       let balance = 0n;
       const rows = goal ? goal.operations.map((operation) => {
-        balance += BigInt(operation.amount);
+        balance += operation.type === "withdraw" ? -BigInt(operation.amount) : BigInt(operation.amount);
         const row = document.createElement("li");
         row.className = "history-entry";
         const date = document.createElement("time");
         date.dateTime = operation.date;
         date.textContent = displayDate(operation.date);
         const amount = document.createElement("p");
-        amount.textContent = `${operation.type === "initial" ? "Начальная сумма" : "Пополнение"}: +${money(operation.amount)}`;
+        amount.textContent = `${operation.type === "initial" ? "Начальная сумма" : operation.type === "withdraw" ? "Снятие" : "Пополнение"}: ${operation.type === "withdraw" ? "−" : "+"}${money(operation.amount)}`;
         const remaining = document.createElement("p");
-        remaining.textContent = `Остаток: ${money(balance)}`;
+        remaining.textContent = `Остаток: ${savingsMoney(balance)}`;
         row.append(date, amount, remaining);
+        if (operation.type === "withdraw" && operation.confirmedNegative === true) {
+          const confirmation = document.createElement("p");
+          confirmation.className = "goal-negative";
+          confirmation.textContent = "Снятие в минус подтверждено";
+          row.append(confirmation);
+        }
         return row;
       }) : [];
       rows.reverse().forEach((row) => fragment.append(row));
@@ -307,6 +351,113 @@
       if (saved) focusGoalAction("deposit", id);
     }
   });
+  function renderWithdrawal() {
+    const goal = savingsReadable ? savings.goals.find((item) => item.id === withdrawGoalId) : null;
+    const amount = parseAmount(byId("withdraw-amount").value);
+    if (withdrawConfirmation && (!goal || JSON.stringify(goal) !== withdrawConfirmation.goal || amount !== withdrawConfirmation.amount)) {
+      withdrawConfirmation = null;
+      withdrawNotice = "Данные изменились. Проверьте результат и нажмите «Снять» заново.";
+    }
+    byId("withdraw-confirmation").hidden = !withdrawConfirmation;
+    byId("withdraw-amount").disabled = savingsWritePending || Boolean(withdrawConfirmation);
+    byId("save-withdraw").disabled = savingsWritePending || !goal || Boolean(withdrawConfirmation);
+    if (withdrawGoalId === null) return;
+    byId("withdraw-goal-name").textContent = goal ? goal.name : "Цель недоступна";
+    byId("withdraw-current").textContent = goal ? savingsMoney(goalBalance(goal)) : "—";
+    byId("withdraw-next").textContent = goal && amount !== null ? savingsMoney(goalBalance(goal) - BigInt(amount)) : "—";
+    byId("withdraw-state").textContent = !savingsReadable ? "Не удалось прочитать накопления. Снятие приостановлено." : !goal ? "Цель удалена в другой вкладке. Снятие не сохранено." : withdrawNotice;
+    if (withdrawConfirmation) {
+      byId("withdraw-confirm-name").textContent = goal.name;
+      byId("withdraw-confirm-amount").textContent = money(amount);
+      byId("withdraw-confirm-current").textContent = savingsMoney(goalBalance(goal));
+      byId("withdraw-confirm-next").textContent = savingsMoney(goalBalance(goal) - BigInt(amount));
+    }
+  }
+
+  function closeWithdrawal() {
+    const id = withdrawGoalId;
+    withdrawGoalId = null;
+    withdrawConfirmation = null;
+    withdrawNotice = "";
+    byId("withdraw-editor").hidden = true;
+    byId("withdraw-confirmation").hidden = true;
+    byId("withdraw-form").reset();
+    fieldError("withdraw-amount", "");
+    return id;
+  }
+
+  byId("withdraw-amount").addEventListener("input", () => {
+    withdrawNotice = "";
+    renderWithdrawal();
+  });
+  byId("cancel-withdraw").addEventListener("click", () => {
+    if (!savingsWritePending) focusGoalAction("withdraw", closeWithdrawal());
+  });
+  byId("cancel-withdraw-confirm").addEventListener("click", () => {
+    if (savingsWritePending) return;
+    withdrawConfirmation = null;
+    withdrawNotice = "";
+    renderWithdrawal();
+    byId("withdraw-amount").focus();
+  });
+  byId("withdraw-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!withdrawConfirmation) return changeWithdrawal(false);
+  });
+  byId("confirm-withdraw").addEventListener("click", () => changeWithdrawal(true));
+
+  async function changeWithdrawal(confirmed) {
+    if (savingsWritePending || withdrawGoalId === null || (confirmed && !withdrawConfirmation)) return;
+    byId("goal-status").textContent = "";
+    const amount = parseAmount(byId("withdraw-amount").value);
+    fieldError("withdraw-amount", amount === null ? "Введите целую сумму от 1 до 9 007 199 254 740 991 ₸." : "");
+    if (amount === null) { byId("withdraw-amount").focus(); return; }
+    const id = withdrawGoalId;
+    const confirmation = confirmed ? withdrawConfirmation : null;
+    let saved = false;
+    let requestedConfirmation = false;
+    savingsWritePending = true;
+    withdrawNotice = "";
+    renderSavings(new Date());
+    try {
+      const withdraw = () => {
+        loadSavings();
+        if (!savingsReadable) return;
+        const goal = savings.goals.find((item) => item.id === id);
+        if (!goal) return;
+        if (confirmed && (withdrawConfirmation !== confirmation || JSON.stringify(goal) !== confirmation.goal || amount !== confirmation.amount)) {
+          withdrawConfirmation = null;
+          withdrawNotice = "Данные изменились. Проверьте результат и нажмите «Снять» заново.";
+          return;
+        }
+        const balance = goalBalance(goal) - BigInt(amount);
+        if (balance < 0n && !confirmed) {
+          withdrawConfirmation = { id, amount, goal: JSON.stringify(goal) };
+          requestedConfirmation = true;
+          return;
+        }
+        const operation = { id: savingsId(), type: "withdraw", amount, date: localDate(), confirmedNegative: balance < 0n };
+        const next = { ...savings, goals: savings.goals.map((item) => item.id === id ? { ...item, operations: [...item.operations, operation] } : item) };
+        localStorage.setItem(SAVINGS_KEY, JSON.stringify(next));
+        savings = next;
+        saved = true;
+        closeWithdrawal();
+        byId("goal-status").textContent = "Снятие сохранено";
+      };
+      if (navigator.locks?.request) await navigator.locks.request(SAVINGS_KEY, withdraw);
+      else withdraw();
+    } catch {
+      withdrawConfirmation = null;
+      savingsError("Не удалось сохранить снятие. Введённая сумма оставлена, попробуйте снова.");
+    } finally {
+      savingsWritePending = false;
+      renderSavings(new Date());
+      if (saved) focusGoalAction("withdraw", id);
+      else if (requestedConfirmation && withdrawConfirmation) byId("cancel-withdraw-confirm").focus();
+      else if (!withdrawConfirmation) byId("withdraw-amount").focus();
+    }
+  }
+
   function closeGoalForm() {
     byId("goal-editor").hidden = true;
     byId("create-goal").setAttribute("aria-expanded", "false");

@@ -160,6 +160,22 @@
             <div class="form-footer"><button id="save-deposit" class="primary" type="submit">Пополнить</button><button id="cancel-deposit" type="button">Отмена</button></div>
           </form>
         </section>
+        <section id="withdraw-editor" class="card" aria-labelledby="withdraw-heading" hidden>
+          <h2 id="withdraw-heading">Снять из накоплений</h2>
+          <p id="withdraw-goal-name" class="goal-description"></p>
+          <form id="withdraw-form" novalidate>
+            <div class="field"><label for="withdraw-amount">Сумма, ₸</label><input id="withdraw-amount" type="text" inputmode="numeric" required aria-describedby="withdraw-amount-error"><p id="withdraw-amount-error" class="error" hidden></p></div>
+            <dl class="goal-values"><div><dt>Сейчас накоплено</dt><dd id="withdraw-current">—</dd></div><div><dt>После снятия</dt><dd id="withdraw-next">—</dd></div></dl>
+            <p id="withdraw-state" class="error" role="status"></p>
+            <div class="form-footer"><button id="save-withdraw" class="primary" type="submit">Снять</button><button id="cancel-withdraw" type="button">Отмена</button></div>
+          </form>
+          <section id="withdraw-confirmation" class="withdraw-confirmation" aria-labelledby="withdraw-confirm-heading" hidden>
+            <h3 id="withdraw-confirm-heading">Накопления станут отрицательными</h3>
+            <p id="withdraw-confirm-name" class="goal-description"></p>
+            <dl class="goal-values"><div><dt>Сумма снятия</dt><dd id="withdraw-confirm-amount"></dd></div><div><dt>Сейчас накоплено</dt><dd id="withdraw-confirm-current"></dd></div><div><dt>После снятия</dt><dd id="withdraw-confirm-next"></dd></div></dl>
+            <div class="form-footer"><button id="cancel-withdraw-confirm" type="button">Отмена</button><button id="confirm-withdraw" type="button">Снять в минус</button></div>
+          </section>
+        </section>
         <section id="goal-history" class="card" aria-labelledby="history-heading" hidden>
           <div class="section-heading"><h2 id="history-heading" tabindex="-1">История</h2><button id="close-history" type="button">Закрыть</button></div>
           <p id="history-goal-name" class="goal-description"></p>
