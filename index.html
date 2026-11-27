@@ -59,6 +59,15 @@
             <dl id="month-category-totals" class="month-category-totals"></dl>
           </section>
         </div>
+        <section class="card" aria-labelledby="recent-heading">
+          <div class="section-heading">
+            <h2 id="recent-heading">Последние траты месяца</h2>
+            <button type="button" data-view="expenses" aria-controls="view-expenses">Все траты <span aria-hidden="true">→</span></button>
+          </div>
+          <p class="budget-note">До пяти последних добавленных записей за текущий месяц.</p>
+          <p id="recent-state" class="analytics-state">В этом месяце трат пока нет</p>
+          <ul id="recent-expenses" class="recent-expenses" aria-label="Последние траты месяца"></ul>
+        </section>
         <section class="card" aria-labelledby="overview-budget-heading">
           <div class="section-heading">
             <h2 id="overview-budget-heading">Состояние бюджета</h2>
@@ -67,9 +76,6 @@
           <p class="budget-note">Расходы и лимиты текущего месяца.</p>
           <div id="overview-budget-categories" class="overview-budget-categories"></div>
         </section>
-        <div class="overview-actions">
-          <button type="button" data-view="expenses" aria-controls="view-expenses">Все траты <span aria-hidden="true">→</span></button>
-        </div>
       </section>
       <section id="view-expenses" aria-label="Траты" hidden>
         <div class="expense-month"><span>Потрачено за текущий месяц</span><strong id="expenses-month-total">0 ₸</strong></div>

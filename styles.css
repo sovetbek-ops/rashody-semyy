@@ -83,8 +83,12 @@ h3 { line-height: 1.4; }
 .month-category-totals > div:nth-child(3) .category-share-fill { background: #76549d; }
 .month-category-totals > div:nth-child(4) .category-share-fill { background: #96613b; }
 .month-category-totals > div:nth-child(5) .category-share-fill { background: #a34f68; }
-.overview-actions { display: flex; flex-wrap: wrap; gap: 12px; }
-.overview-actions button { display: flex; align-items: center; gap: 24px; }
+.recent-expenses { list-style: none; padding: 0; margin: 0; }
+.recent-expense { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, auto); gap: 6px 20px; padding: 18px 0; border-top: 1px solid var(--border); }
+.recent-expense > * { min-width: 0; overflow-wrap: anywhere; }
+.recent-amount { text-align: right; max-width: 300px; }
+.recent-date { grid-column: 1 / -1; font-size: 13px; color: var(--muted); }
+.recent-comment { grid-column: 1 / -1; margin: 4px 0 0; white-space: pre-wrap; font-size: 14px; color: var(--muted); }
 .expense-month { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; justify-content: space-between; margin-bottom: 24px; color: var(--muted); }
 .expense-month strong { color: #203a31; font-size: 22px; }
 .card { min-width: 0; background: var(--paper); border: 1px solid var(--border); border-radius: 20px; padding: 28px; margin-bottom: 24px; box-shadow: 0 4px 20px #203a3104; }
@@ -198,8 +202,8 @@ footer { color: var(--muted); font-size: 12px; padding: 32px 0 8px; }
   .metric dd { font-size: 30px; }
   .overview-category-values { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .daily-chart { gap: 2px; }
-  .overview-actions { flex-direction: column; }
-  .overview-actions button { justify-content: space-between; }
+  .recent-expense { grid-template-columns: minmax(0, 1fr); }
+  .recent-amount { text-align: left; max-width: 100%; }
   .form-grid { grid-template-columns: 1fr; gap: 18px; }
   .form-footer .primary { width: 100%; }
   fieldset { padding: 14px 10px; }

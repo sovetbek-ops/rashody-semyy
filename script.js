@@ -282,6 +282,38 @@
     });
     renderOverviewBudget(month, spentByCategory, budgetTotal, spentTotal, remainingTotal, limits.length);
     renderOverviewAnalytics(now, month, spentByCategory, spentTotal);
+    renderRecentExpenses(month);
+  }
+
+  function renderRecentExpenses(month) {
+    const recent = storageReadable ? expenses.filter((item) => item.date.startsWith(`${month}-`)).slice(0, 5) : [];
+    const state = byId("recent-state");
+    state.textContent = storageReadable ? "В этом месяце трат пока нет" : "Не удалось прочитать траты. Последние записи пока недоступны.";
+    state.hidden = storageReadable && recent.length > 0;
+    const fragment = document.createDocumentFragment();
+    recent.forEach((item) => {
+      const row = document.createElement("li");
+      row.className = "recent-expense";
+      const category = document.createElement("strong");
+      category.className = "recent-category";
+      category.textContent = item.category;
+      const amount = document.createElement("strong");
+      amount.className = "recent-amount";
+      amount.textContent = money(item.amount);
+      const date = document.createElement("time");
+      date.className = "recent-date";
+      date.dateTime = item.date;
+      date.textContent = displayDate(item.date);
+      row.append(category, amount, date);
+      if (item.comment) {
+        const comment = document.createElement("p");
+        comment.className = "recent-comment";
+        comment.textContent = item.comment;
+        row.append(comment);
+      }
+      fragment.append(row);
+    });
+    byId("recent-expenses").replaceChildren(fragment);
   }
 
   function renderOverviewAnalytics(now, month, spentByCategory, spentTotal) {
