@@ -36,10 +36,28 @@ h1 { margin: 0 0 8px; font-size: clamp(28px, 4vw, 36px); letter-spacing: -.035em
 h2 { display: flex; align-items: center; gap: 10px; font-size: 20px; line-height: 1.35; margin: 0; letter-spacing: -.02em; }
 h3 { line-height: 1.4; }
 .intro { margin: 0; color: var(--muted); font-size: 14px; }
-.summary { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 24px; padding: 32px; border: 1px solid #c6dacd; border-radius: 20px; background: var(--sage); margin-bottom: 20px; }
-.summary h2 { font-size: 16px; font-weight: 600; }
-#month-label { color: var(--muted); margin: 8px 0 0; font-size: 14px; }
-#month-total { font-size: clamp(32px, 4vw, 48px); line-height: 1.2; letter-spacing: -.04em; max-width: 100%; min-width: 0; }
+.overview-month { margin-bottom: 20px; }
+#month-label { color: var(--muted); margin: 0; font-size: 16px; }
+.overview-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 0 0 16px; }
+.metric { min-width: 0; display: flex; flex-direction: column; padding: 24px 20px; border: 1px solid var(--border); border-radius: 16px; background: var(--paper); }
+.metric-spent { background: var(--sage); border-color: #c6dacd; }
+.metric dt { color: var(--muted); font-size: 14px; font-weight: 600; }
+.metric dd { margin: 12px 0 16px; font-size: clamp(24px, 2.2vw, 32px); font-weight: 750; line-height: 1.25; letter-spacing: -.03em; }
+.metric dd.metric-note { margin: auto 0 0; color: var(--muted); font-size: 12px; font-weight: 400; letter-spacing: 0; line-height: 1.5; }
+#overview-budget-note { margin-bottom: 24px; }
+#overview-budget-warning { margin-bottom: 24px; }
+.overview-budget-categories { display: grid; gap: 20px; }
+.overview-budget-category { min-width: 0; border-top: 1px solid var(--border); padding-top: 20px; }
+.overview-budget-category h3 { font-size: 16px; margin: 0 0 12px; overflow-wrap: anywhere; }
+.overview-category-values { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.overview-category-values > div { min-width: 0; }
+.overview-category-values dt { font-size: 12px; color: var(--muted); }
+.overview-category-values dd { margin: 4px 0 0; font-weight: 650; }
+.budget-track { height: 8px; border-radius: 8px; background: #e3eae5; margin-top: 16px; overflow: hidden; }
+.budget-fill { height: 100%; border-radius: inherit; background: var(--green); }
+.is-over-budget, .overview-category-warning { color: #963b30; }
+.budget-fill.is-over-budget { background: #963b30; }
+.overview-category-warning { margin: 10px 0 0; font-size: 14px; font-weight: 650; overflow-wrap: anywhere; }
 .overview-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .overview-actions button { display: flex; align-items: center; gap: 24px; }
 .expense-month { display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: center; justify-content: space-between; margin-bottom: 24px; color: var(--muted); }
@@ -131,6 +149,7 @@ footer { color: var(--muted); font-size: 12px; padding: 32px 0 8px; }
 .skip-link:focus { transform: none; }
 [hidden] { display: none !important; }
 @media (max-width: 1000px) {
+  .overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .app-shell { grid-template-columns: 200px minmax(0, 1fr); }
   .sidebar { padding-inline: 12px; }
   .nav-current { font-size: 9px; }
@@ -147,8 +166,11 @@ footer { color: var(--muted); font-size: 12px; padding: 32px 0 8px; }
   main { padding: 24px 16px; }
   .page-header { margin-bottom: 24px; }
   .page-header > button { width: 100%; }
-  .card, .summary { padding: 22px 18px; border-radius: 16px; margin-bottom: 20px; }
-  .summary { flex-direction: column; align-items: flex-start; }
+  .card { padding: 22px 18px; border-radius: 16px; margin-bottom: 20px; }
+  .overview-metrics { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .metric { padding: 22px 18px; }
+  .metric dd { font-size: 30px; }
+  .overview-category-values { grid-template-columns: minmax(0, 1fr); gap: 10px; }
   .overview-actions { flex-direction: column; }
   .overview-actions button { justify-content: space-between; }
   .form-grid { grid-template-columns: 1fr; gap: 18px; }

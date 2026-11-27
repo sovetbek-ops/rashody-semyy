@@ -241,6 +241,7 @@
       resetInputs = true;
     }
     byId("budget-month").textContent = now.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
+    byId("month-label").textContent = byId("budget-month").textContent;
     const spentByCategory = new Map(categories.map((category) => [category, 0n]));
     if (storageReadable) {
       expenses.forEach((item) => {
@@ -279,6 +280,68 @@
         byId(`budget-status-${index}`).textContent = "";
       }
     });
+    renderOverviewBudget(month, spentByCategory, budgetTotal, spentTotal, remainingTotal, limits.length);
+  }
+
+  function renderOverviewBudget(month, spentByCategory, budgetTotal, spentTotal, remainingTotal, limitCount) {
+    byId("month-total").textContent = storageReadable ? money(spentTotal) : "—";
+    byId("expenses-month-total").textContent = byId("month-total").textContent;
+    byId("overview-budget-total").textContent = !budgetsReadable ? "—" : limitCount ? money(budgetTotal) : "Не задан";
+    byId("overview-remaining").textContent = remainingTotal === null ? "—" : remainingTotal < 0n ? `−${money(-remainingTotal)}` : money(remainingTotal);
+    byId("overview-remaining").className = remainingTotal !== null && remainingTotal < 0n ? "is-over-budget" : "";
+    byId("overview-expense-count").textContent = storageReadable ? String(expenses.filter((item) => item.date.startsWith(`${month}-`)).length) : "—";
+    byId("overview-limit-count").textContent = `Лимиты: ${budgetsReadable ? limitCount : "—"} из ${categories.length}`;
+    byId("overview-budget-note").textContent = !budgetsReadable ? "Лимиты недоступны. Бюджет и остатки пока неизвестны." : !limitCount
+      ? "Задайте лимиты в разделе «Бюджет», чтобы видеть остатки."
+      : "Остаток рассчитан по заданным лимитам. Расходы включают все категории, в том числе без лимита.";
+    const warning = byId("overview-budget-warning");
+    warning.textContent = remainingTotal !== null && remainingTotal < 0n ? `Перерасход бюджета: ${money(-remainingTotal)}` : "";
+    warning.hidden = !warning.textContent;
+    const fragment = document.createDocumentFragment();
+    categories.forEach((category, index) => {
+      const row = document.createElement("section");
+      row.className = "overview-budget-category";
+      const heading = document.createElement("h3");
+      heading.id = `overview-category-${index}`;
+      heading.textContent = category;
+      row.setAttribute("aria-labelledby", heading.id);
+      const limit = budgetsReadable ? budgets[month]?.[category] : undefined;
+      const spent = spentByCategory.get(category);
+      const remaining = storageReadable && limit !== undefined ? BigInt(limit) - spent : null;
+      const details = document.createElement("dl");
+      details.className = "overview-category-values";
+      const values = [
+        ["Потрачено", storageReadable ? money(spent) : "—"],
+        ["Лимит", !budgetsReadable ? "—" : limit === undefined ? "Не задан" : money(limit)],
+        ["Осталось", remaining === null ? "—" : remaining < 0n ? `−${money(-remaining)}` : money(remaining)]
+      ];
+      values.forEach(([label, value]) => {
+        const pair = document.createElement("div");
+        const name = document.createElement("dt");
+        name.textContent = label;
+        const amount = document.createElement("dd");
+        amount.textContent = value;
+        pair.append(name, amount);
+        details.append(pair);
+      });
+      const track = document.createElement("div");
+      track.className = "budget-track";
+      track.setAttribute("aria-hidden", "true");
+      track.hidden = !storageReadable || limit === undefined;
+      const fill = document.createElement("div");
+      fill.className = remaining !== null && remaining < 0n ? "budget-fill is-over-budget" : "budget-fill";
+      // Divide as integers first: only the bounded display percentage becomes a Number.
+      const ratio = limit !== undefined ? spent * 10000n / BigInt(limit) : 0n;
+      fill.style.width = `${Number(ratio > 10000n ? 10000n : ratio) / 100}%`;
+      track.append(fill);
+      const categoryWarning = document.createElement("p");
+      categoryWarning.className = "overview-category-warning";
+      categoryWarning.textContent = remaining !== null && remaining < 0n ? `Перерасход: ${money(-remaining)}` : "";
+      categoryWarning.hidden = !categoryWarning.textContent;
+      row.append(heading, details, track, categoryWarning);
+      fragment.append(row);
+    });
+    byId("overview-budget-categories").replaceChildren(fragment);
   }
 
   function load() {
@@ -311,10 +374,6 @@
     if (!dateEdited) byId("date").value = localDate(now);
     renderBudget(now);
     updateQuickPeriod(now);
-    const month = localDate(now).slice(0, 7);
-    byId("month-label").textContent = now.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
-    byId("month-total").textContent = storageReadable ? money(total(expenses.filter((item) => item.date.startsWith(`${month}-`)))) : "—";
-    byId("expenses-month-total").textContent = byId("month-total").textContent;
     const invalidPeriod = (start.value && !validDate(start.value)) || (end.value && !validDate(end.value)) || (start.value && end.value && start.value > end.value);
     byId("period-error").textContent = invalidPeriod ? "Проверьте период: дата «С» должна быть не позже даты «По»." : "";
     byId("period-error").hidden = !invalidPeriod;
