@@ -61,6 +61,12 @@
   let withdrawGoalId = null;
   let withdrawConfirmation = null;
   let withdrawNotice = "";
+  let editGoalId = null;
+  let editSnapshot = null;
+  let editConflict = false;
+  let deleteGoalId = null;
+  let deleteSnapshot = null;
+  let deleteConflict = false;
 
   function savingsError(message) {
     byId("savings-error").textContent = message;
@@ -116,6 +122,9 @@
     byId("cancel-withdraw").disabled = savingsWritePending;
     byId("confirm-withdraw").disabled = savingsWritePending;
     byId("cancel-withdraw-confirm").disabled = savingsWritePending;
+    editFields.forEach((id) => { byId(id).disabled = savingsWritePending; });
+    byId("cancel-edit").disabled = savingsWritePending;
+    byId("cancel-delete-goal").disabled = savingsWritePending;
     document.querySelectorAll("[data-savings-action]").forEach((button) => { button.disabled = savingsWritePending || !savingsReadable; });
     renderSavingsDetails();
     const state = byId("goals-state");
@@ -191,7 +200,7 @@
       }
       const actions = document.createElement("div");
       actions.className = "goal-actions";
-      [["deposit", "Пополнить"], ["withdraw", "Снять"], ["history", "История"]].forEach(([action, label]) => {
+      [["deposit", "Пополнить"], ["withdraw", "Снять"], ["history", "История"], ["edit", "Изменить"], ["delete", "Удалить"]].forEach(([action, label]) => {
         const button = document.createElement("button");
         button.id = `${action}-${goal.id}`;
         button.type = "button";
@@ -200,6 +209,7 @@
         button.setAttribute("aria-controls", action === "history" ? "goal-history" : `${action}-editor`);
         button.setAttribute("aria-label", `${label}: ${goal.name}`);
         button.disabled = savingsWritePending;
+        if (action === "delete") button.className = "danger";
         button.addEventListener("click", () => {
           if (!savingsReadable || savingsWritePending) return;
           byId("goal-status").textContent = "";
@@ -223,6 +233,8 @@
             byId("withdraw-editor").hidden = false;
             renderSavingsDetails();
             (withdrawConfirmation ? byId("cancel-withdraw-confirm") : byId("withdraw-amount")).focus();
+          } else if (action === "edit" || action === "delete") {
+            openGoalManagement(action, goal.id);
           } else {
             historyGoalId = goal.id;
             byId("goal-history").hidden = false;
@@ -239,6 +251,168 @@
   }
 
   const goalFields = ["goal-name", "goal-description", "goal-target", "goal-initial", "goal-date"];
+  const editFields = ["edit-name", "edit-description", "edit-target", "edit-date"];
+  function renderGoalManagement() {
+    const edited = savingsReadable ? savings.goals.find((goal) => goal.id === editGoalId) : null;
+    if (editGoalId !== null) {
+      if (savingsReadable && (!edited || JSON.stringify(edited) !== editSnapshot)) editConflict = true;
+      byId("edit-balance").textContent = edited ? savingsMoney(goalBalance(edited)) : "—";
+      byId("edit-state").textContent = !savingsReadable ? "Не удалось прочитать накопления. Сохранение приостановлено." : !edited
+        ? "Цель удалена. Изменения не сохранены."
+        : editConflict ? "Цель изменилась в другой вкладке. Проверьте данные заново: откройте «Изменить» у актуальной цели." : "";
+    }
+    byId("save-edit").disabled = savingsWritePending || !edited || editConflict;
+    const deleted = savingsReadable ? savings.goals.find((goal) => goal.id === deleteGoalId) : null;
+    if (deleteGoalId !== null) {
+      if (savingsReadable && (!deleted || JSON.stringify(deleted) !== deleteSnapshot)) deleteConflict = true;
+      byId("delete-goal-name").textContent = deleted ? deleted.name : "Цель недоступна";
+      byId("delete-goal-target").textContent = deleted ? money(deleted.target) : "—";
+      byId("delete-goal-balance").textContent = deleted ? savingsMoney(goalBalance(deleted)) : "—";
+      byId("delete-goal-state").textContent = !savingsReadable ? "Не удалось прочитать накопления. Удаление приостановлено." : !deleted
+        ? "Цель уже удалена."
+        : deleteConflict ? "Цель изменилась в другой вкладке. Проверьте данные заново: откройте «Удалить» у актуальной цели." : "";
+    }
+    byId("confirm-delete-goal").disabled = savingsWritePending || !deleted || deleteConflict;
+  }
+
+  function openGoalManagement(action, id) {
+    loadSavings();
+    renderSavings(new Date());
+    const goal = savingsReadable ? savings.goals.find((item) => item.id === id) : null;
+    if (!goal) {
+      if (savingsReadable) savingsError("Цель уже удалена. Выберите другую цель.");
+      return;
+    }
+    if (action === "edit") {
+      editGoalId = id;
+      editSnapshot = JSON.stringify(goal);
+      editConflict = false;
+      editFields.forEach((field) => fieldError(field, ""));
+      byId("edit-name").value = goal.name;
+      byId("edit-description").value = goal.description;
+      byId("edit-target").value = String(goal.target).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+      byId("edit-date").value = goal.date;
+      byId("edit-date-preview").textContent = displayDate(goal.date);
+      byId("edit-editor").hidden = false;
+    } else {
+      deleteGoalId = id;
+      deleteSnapshot = JSON.stringify(goal);
+      deleteConflict = false;
+      byId("delete-editor").hidden = false;
+    }
+    renderGoalManagement();
+    (action === "edit" ? byId("edit-name") : byId("cancel-delete-goal")).focus();
+  }
+
+  function closeGoalEdit() {
+    const id = editGoalId;
+    editGoalId = null;
+    editSnapshot = null;
+    editConflict = false;
+    byId("edit-editor").hidden = true;
+    byId("edit-form").reset();
+    editFields.forEach((field) => fieldError(field, ""));
+    byId("edit-date-preview").textContent = "";
+    return id;
+  }
+
+  function closeGoalDelete() {
+    const id = deleteGoalId;
+    deleteGoalId = null;
+    deleteSnapshot = null;
+    deleteConflict = false;
+    byId("delete-editor").hidden = true;
+    return id;
+  }
+
+  byId("edit-date").addEventListener("input", () => {
+    const value = byId("edit-date").value;
+    byId("edit-date-preview").textContent = validDate(value) ? displayDate(value) : "";
+  });
+  byId("cancel-edit").addEventListener("click", () => {
+    if (!savingsWritePending) focusGoalAction("edit", closeGoalEdit());
+  });
+  byId("cancel-delete-goal").addEventListener("click", () => {
+    if (!savingsWritePending) focusGoalAction("delete", closeGoalDelete());
+  });
+  byId("edit-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (savingsWritePending || editGoalId === null || editConflict) return;
+    byId("goal-status").textContent = "";
+    const name = byId("edit-name").value.trim();
+    const description = byId("edit-description").value.trim();
+    const target = parseAmount(byId("edit-target").value);
+    const date = byId("edit-date").value;
+    fieldError("edit-name", !name || Array.from(name).length > 100 ? "Введите название от 1 до 100 символов." : "");
+    fieldError("edit-description", Array.from(description).length > 1000 ? "Описание — не больше 1 000 символов." : "");
+    fieldError("edit-target", target === null ? "Введите целую сумму от 1 до 9 007 199 254 740 991 ₸." : "");
+    fieldError("edit-date", !validDate(date) ? "Укажите корректную желаемую дату." : "");
+    const invalid = byId("edit-form").querySelector('[aria-invalid="true"]');
+    if (invalid) { invalid.focus(); return; }
+    const id = editGoalId;
+    let saved = false;
+    savingsWritePending = true;
+    renderSavings(new Date());
+    try {
+      const edit = () => {
+        loadSavings();
+        renderGoalManagement();
+        if (!savingsReadable || editConflict) return;
+        const next = { ...savings, goals: savings.goals.map((goal) => goal.id === id ? { ...goal, name, description, target, date } : goal) };
+        localStorage.setItem(SAVINGS_KEY, JSON.stringify(next));
+        savings = next;
+        saved = true;
+        closeGoalEdit();
+        byId("goal-status").textContent = "Цель изменена";
+      };
+      if (navigator.locks?.request) await navigator.locks.request(SAVINGS_KEY, edit);
+      else edit();
+    } catch {
+      savingsError("Не удалось сохранить изменения цели. Введённые поля оставлены, попробуйте снова.");
+    } finally {
+      savingsWritePending = false;
+      renderSavings(new Date());
+      if (saved) focusGoalAction("edit", id);
+    }
+  });
+  byId("confirm-delete-goal").addEventListener("click", async () => {
+    if (savingsWritePending || deleteGoalId === null || deleteConflict) return;
+    byId("goal-status").textContent = "";
+    const id = deleteGoalId;
+    let saved = false;
+    savingsWritePending = true;
+    renderSavings(new Date());
+    try {
+      const remove = () => {
+        loadSavings();
+        renderGoalManagement();
+        if (!savingsReadable || deleteConflict) return;
+        const next = { ...savings, goals: savings.goals.filter((goal) => goal.id !== id) };
+        localStorage.setItem(SAVINGS_KEY, JSON.stringify(next));
+        savings = next;
+        saved = true;
+        closeGoalDelete();
+        if (editGoalId === id) closeGoalEdit();
+        if (depositGoalId === id) closeDeposit();
+        if (withdrawGoalId === id) closeWithdrawal();
+        if (historyGoalId === id) {
+          historyGoalId = null;
+          byId("goal-history").hidden = true;
+          byId("history-list").replaceChildren();
+        }
+        byId("goal-status").textContent = "Цель и история удалены";
+      };
+      if (navigator.locks?.request) await navigator.locks.request(SAVINGS_KEY, remove);
+      else remove();
+    } catch {
+      savingsError("Не удалось сохранить удаление. Цель и её история остались, попробуйте снова.");
+    } finally {
+      savingsWritePending = false;
+      renderSavings(new Date());
+      if (saved) byId("savings-heading").focus();
+    }
+  });
+
   function savingsId() {
     return Array.from(crypto.getRandomValues(new Uint32Array(4)), (part) => part.toString(16).padStart(8, "0")).join("");
   }
@@ -275,6 +449,7 @@
       byId("deposit-state").textContent = !savingsReadable ? "Не удалось прочитать накопления. Пополнение приостановлено." : !depositGoal ? "Цель удалена в другой вкладке. Пополнение не сохранено." : "";
     }
     renderWithdrawal();
+    renderGoalManagement();
     if (historyGoalId !== null) {
       const goal = savingsReadable ? savings.goals.find((item) => item.id === historyGoalId) : null;
       byId("history-goal-name").textContent = goal ? goal.name : "Цель недоступна";

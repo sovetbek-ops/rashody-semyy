@@ -176,6 +176,29 @@
             <div class="form-footer"><button id="cancel-withdraw-confirm" type="button">Отмена</button><button id="confirm-withdraw" type="button">Снять в минус</button></div>
           </section>
         </section>
+        <section id="edit-editor" class="card" aria-labelledby="edit-heading" hidden>
+          <h2 id="edit-heading">Изменить цель</h2>
+          <form id="edit-form" novalidate>
+            <div class="form-grid">
+              <div class="field goal-wide"><label for="edit-name">Название</label><input id="edit-name" type="text" required aria-describedby="edit-name-error"><p id="edit-name-error" class="error" hidden></p></div>
+              <div class="field goal-wide"><label for="edit-description">Описание <span>необязательно</span></label><textarea id="edit-description" rows="3" aria-describedby="edit-description-error"></textarea><p id="edit-description-error" class="error" hidden></p></div>
+              <div class="field"><label for="edit-target">Целевая сумма, ₸</label><input id="edit-target" type="text" inputmode="numeric" required aria-describedby="edit-target-error"><p id="edit-target-error" class="error" hidden></p></div>
+              <div class="field"><label for="edit-date">Желаемая дата</label><input id="edit-date" type="date" required aria-describedby="edit-date-preview edit-date-error"><p id="edit-date-preview" class="budget-note"></p><p id="edit-date-error" class="error" hidden></p></div>
+            </div>
+            <dl class="goal-values"><div><dt>Накоплено</dt><dd id="edit-balance">—</dd></div></dl>
+            <p class="budget-note">Изменяйте накопления через пополнение или снятие.</p>
+            <p id="edit-state" class="error" role="status"></p>
+            <div class="form-footer"><button id="save-edit" class="primary" type="submit">Сохранить</button><button id="cancel-edit" type="button">Отмена</button></div>
+          </form>
+        </section>
+        <section id="delete-editor" class="card" aria-labelledby="delete-goal-heading" hidden>
+          <h2 id="delete-goal-heading">Удалить цель и всю её историю?</h2>
+          <p id="delete-goal-name" class="goal-description"></p>
+          <dl class="goal-values"><div><dt>Целевая сумма</dt><dd id="delete-goal-target">—</dd></div><div><dt>Накоплено</dt><dd id="delete-goal-balance">—</dd></div></dl>
+          <p>Восстановить их нельзя.</p>
+          <p id="delete-goal-state" class="error" role="status"></p>
+          <div class="form-footer"><button id="cancel-delete-goal" type="button">Отмена</button><button id="confirm-delete-goal" class="danger" type="button">Удалить цель</button></div>
+        </section>
         <section id="goal-history" class="card" aria-labelledby="history-heading" hidden>
           <div class="section-heading"><h2 id="history-heading" tabindex="-1">История</h2><button id="close-history" type="button">Закрыть</button></div>
           <p id="history-goal-name" class="goal-description"></p>

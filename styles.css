@@ -197,6 +197,7 @@ textarea { display: block; width: 100%; min-width: 0; min-height: 96px; padding:
 .withdraw-confirmation { margin-top: 24px; padding: 16px; border: 1px solid #ad7766; border-radius: 12px; background: #fff0e9; }
 .withdraw-confirmation h3 { margin: 0; overflow-wrap: anywhere; }
 #confirm-withdraw { color: #963b30; border-color: #ad7766; }
+.danger { color: #963b30; border-color: #ad7766; background: #fff5f0; }
 .goal-negative { color: #963b30; overflow-wrap: anywhere; }
 @media (max-width: 1000px) {
   .overview-analytics { grid-template-columns: minmax(0, 1fr); gap: 0; }
