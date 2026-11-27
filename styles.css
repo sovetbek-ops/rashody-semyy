@@ -177,6 +177,18 @@ footer { color: var(--muted); font-size: 12px; padding: 32px 0 8px; }
 .skip-link { position: absolute; top: 8px; left: 8px; transform: translateY(-160%); padding: 12px; background: white; color: var(--green); z-index: 2; }
 .skip-link:focus { transform: none; }
 [hidden] { display: none !important; }
+textarea { display: block; width: 100%; min-width: 0; min-height: 96px; padding: 11px 12px; border: 1px solid #7b8d81; border-radius: 10px; background: #fff; color: #203a31; font: inherit; resize: vertical; }
+.savings-heading { margin-bottom: 24px; }
+.savings-status { color: var(--green); overflow-wrap: anywhere; }
+.savings-status:empty { display: none; }
+.goal-wide { grid-column: 1 / -1; }
+.goal-card h3 { margin: 0; font-size: 21px; overflow-wrap: anywhere; }
+.goal-description { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); }
+.goal-values { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 16px; margin: 24px 0; }
+.goal-values dt { font-size: 14px; color: var(--muted); }
+.goal-values dd { margin: 4px 0 0; font-size: 22px; font-weight: 700; }
+.goal-progress, .goal-deadline, .goal-state { margin: 12px 0 0; overflow-wrap: anywhere; }
+.goal-state { font-weight: 650; }
 @media (max-width: 1000px) {
   .overview-analytics { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .overview-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -189,7 +201,7 @@ footer { color: var(--muted); font-size: 12px; padding: 32px 0 8px; }
   .app-shell { display: block; }
   .sidebar { padding: 20px 16px 14px; gap: 20px; border-inline-end: 0; border-bottom: 1px solid var(--border); }
   .brand small { margin-top: 3px; }
-  nav { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  nav { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
   .nav-button { justify-content: center; flex-wrap: wrap; gap: 0 6px; padding: 8px 4px; font-size: 14px; }
   .nav-current { flex-basis: 100%; margin: 0; text-align: center; line-height: 1; }
   .sidebar-note { display: none; }

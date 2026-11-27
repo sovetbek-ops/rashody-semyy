@@ -16,6 +16,7 @@
         <button type="button" class="nav-button" data-view="overview" aria-controls="view-overview" aria-current="page"><span aria-hidden="true">◫</span>Обзор<span class="nav-current" aria-hidden="true">Выбран</span></button>
         <button type="button" class="nav-button" data-view="expenses" aria-controls="view-expenses"><span aria-hidden="true">≡</span>Траты<span class="nav-current" aria-hidden="true">Выбран</span></button>
         <button type="button" class="nav-button" data-view="budget" aria-controls="view-budget"><span aria-hidden="true">▤</span>Бюджет<span class="nav-current" aria-hidden="true">Выбран</span></button>
+        <button type="button" class="nav-button" data-view="savings" aria-controls="view-savings"><span aria-hidden="true">◎</span>Накопления<span class="nav-current" aria-hidden="true">Выбран</span></button>
       </nav>
       <p class="sidebar-note">Ваш семейный бюджет.<br>На вашем устройстве.</p>
     </aside>
@@ -28,6 +29,7 @@
         <p id="storage-error" class="error" role="alert" hidden></p>
         <p id="budget-error" class="error" role="alert" hidden></p>
         <p id="budget-expenses-error" class="error" role="alert" hidden></p>
+        <p id="savings-error" class="error" role="alert" hidden></p>
       </div>
       <section id="view-overview" aria-label="Обзор">
         <div class="overview-month"><p class="eyebrow">ТЕКУЩИЙ МЕСЯЦ</p><p id="month-label"></p></div>
@@ -128,6 +130,28 @@
           </div>
           <div id="budget-categories"></div>
         </section>
+      </section>
+      <section id="view-savings" aria-label="Накопления" hidden>
+        <div class="section-heading savings-heading">
+          <h2 id="savings-heading" tabindex="-1">Финансовые цели</h2>
+          <button id="create-goal" type="button" class="primary" aria-controls="goal-editor" aria-expanded="false">Создать цель</button>
+        </div>
+        <p id="goal-status" class="savings-status" role="status"></p>
+        <section id="goal-editor" class="card" aria-labelledby="goal-form-heading" hidden>
+          <h2 id="goal-form-heading">Новая цель</h2>
+          <form id="goal-form" novalidate>
+            <div class="form-grid">
+              <div class="field goal-wide"><label for="goal-name">Название</label><input id="goal-name" type="text" required aria-describedby="goal-name-error"><p id="goal-name-error" class="error" hidden></p></div>
+              <div class="field goal-wide"><label for="goal-description">Описание <span>необязательно</span></label><textarea id="goal-description" rows="3" aria-describedby="goal-description-error"></textarea><p id="goal-description-error" class="error" hidden></p></div>
+              <div class="field"><label for="goal-target">Целевая сумма, ₸</label><input id="goal-target" type="text" inputmode="numeric" required aria-describedby="goal-target-error"><p id="goal-target-error" class="error" hidden></p></div>
+              <div class="field"><label for="goal-initial">Уже накоплено, ₸</label><input id="goal-initial" type="text" inputmode="numeric" value="0" required aria-describedby="goal-initial-error"><p id="goal-initial-error" class="error" hidden></p></div>
+              <div class="field"><label for="goal-date">Желаемая дата</label><input id="goal-date" type="date" required aria-describedby="goal-date-preview goal-date-error"><p id="goal-date-preview" class="budget-note"></p><p id="goal-date-error" class="error" hidden></p></div>
+            </div>
+            <div class="form-footer"><button id="save-goal" class="primary" type="submit">Создать</button><button id="cancel-goal" type="button">Отмена</button></div>
+          </form>
+        </section>
+        <p id="goals-state" class="analytics-state">Пока нет целей</p>
+        <div id="goal-list" class="goal-list"></div>
       </section>
       <footer>Данные хранятся только в этом браузере.</footer>
     </main>

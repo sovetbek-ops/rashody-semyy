@@ -3,6 +3,7 @@
 (() => {
   const STORAGE_KEY = "family-expenses-v1";
   const BUDGET_KEY = "family-budgets-v1";
+  const SAVINGS_KEY = "family-savings-v1";
   const categories = ["Продукты", "Транспорт", "Кредит", "Ипотека", "Расходы на секцию ребёнка"];
   const removedCategories = ["Дом", "Другое"];
   const savedCategories = [...categories, "Еда", ...removedCategories];
@@ -10,7 +11,8 @@
   const views = {
     overview: ["Обзор", "Расходы семьи за текущий месяц."],
     expenses: ["Траты", "Записывайте расходы и выбирайте период просмотра."],
-    budget: ["Бюджет", "Планируйте расходы и следите за лимитами месяца."]
+    budget: ["Бюджет", "Планируйте расходы и следите за лимитами месяца."],
+    savings: ["Накопления", "Деньги на цели учитываются отдельно от расходов"]
   };
 
   function showView(view, focusAmount = false) {
@@ -49,6 +51,186 @@
   let renderedExpenses = [];
   let renderedSelection = null;
   let renderedStorageReadable = true;
+  let savings = { version: 1, goals: [] };
+  let savingsReadable = true;
+  let savingsWritePending = false;
+  let renderedSavings = null;
+  let renderedSavingsDay = "";
+
+  function savingsError(message) {
+    byId("savings-error").textContent = message;
+    byId("savings-error").hidden = !message;
+  }
+
+  function loadSavings() {
+    try {
+      const raw = localStorage.getItem(SAVINGS_KEY);
+      const saved = raw === null ? { version: 1, goals: [] } : JSON.parse(raw);
+      const ids = new Set();
+      const uniqueId = (id) => {
+        if (typeof id !== "string" || !id || ids.has(id)) return false;
+        ids.add(id);
+        return true;
+      };
+      if (!saved || saved.version !== 1 || !Array.isArray(saved.goals) || !saved.goals.every((goal) =>
+        goal && uniqueId(goal.id) && typeof goal.name === "string" && goal.name.trim().length > 0 &&
+        Array.from(goal.name).length <= 100 && typeof goal.description === "string" &&
+        Array.from(goal.description).length <= 1000 && Number.isSafeInteger(goal.target) && goal.target > 0 &&
+        validDate(goal.date) && Array.isArray(goal.operations) && goal.operations.length <= 1 &&
+        goal.operations.every((operation) => operation && uniqueId(operation.id) && operation.type === "initial" &&
+          Number.isSafeInteger(operation.amount) && operation.amount > 0 && validDate(operation.date))
+      )) throw new Error("Invalid savings data");
+      // Preserve the rendered cards and focus when the stored document is unchanged.
+      if (!savingsReadable || JSON.stringify(savings) !== JSON.stringify(saved)) savings = saved;
+      savingsReadable = true;
+      savingsError("");
+    } catch {
+      savingsReadable = false;
+      savingsError("Не удалось прочитать накопления. Изменения приостановлены, чтобы не потерять данные. Попробуйте обновить страницу.");
+    }
+  }
+
+  function renderSavings(now) {
+    goalFields.forEach((id) => { byId(id).disabled = savingsWritePending; });
+    byId("create-goal").disabled = !savingsReadable || savingsWritePending;
+    byId("save-goal").disabled = !savingsReadable || savingsWritePending;
+    byId("cancel-goal").disabled = savingsWritePending;
+    const state = byId("goals-state");
+    state.hidden = savingsReadable && savings.goals.length > 0;
+    state.textContent = savingsReadable ? "Пока нет целей" : "Накопления недоступны: —";
+    const today = localDate(now);
+    const snapshot = savingsReadable ? savings : null;
+    if (renderedSavings === snapshot && renderedSavingsDay === today) return;
+    renderedSavings = snapshot;
+    renderedSavingsDay = today;
+    const fragment = document.createDocumentFragment();
+    if (savingsReadable) savings.goals.forEach((goal) => {
+      const balance = goal.operations.reduce((sum, operation) => sum + BigInt(operation.amount), 0n);
+      const target = BigInt(goal.target);
+      const remaining = balance >= target ? 0n : target - balance;
+      const tenths = balance >= target ? 1000n : balance * 1000n / target;
+      const percent = `${tenths / 10n}${tenths % 10n ? `,${tenths % 10n}` : ""}%`;
+      const card = document.createElement("article");
+      card.className = "card goal-card";
+      const heading = document.createElement("h3");
+      heading.id = `goal-${goal.id}`;
+      heading.textContent = goal.name;
+      card.setAttribute("aria-labelledby", heading.id);
+      card.append(heading);
+      if (goal.description) {
+        const description = document.createElement("p");
+        description.className = "goal-description";
+        description.textContent = goal.description;
+        card.append(description);
+      }
+      const values = document.createElement("dl");
+      values.className = "goal-values";
+      [["Целевая сумма", target], ["Накоплено", balance], ["Осталось", remaining]].forEach(([label, amount]) => {
+        const pair = document.createElement("div");
+        const name = document.createElement("dt");
+        name.textContent = label;
+        const value = document.createElement("dd");
+        value.textContent = money(amount);
+        pair.append(name, value);
+        values.append(pair);
+      });
+      const progress = document.createElement("p");
+      progress.className = "goal-progress";
+      progress.textContent = `Выполнено: ${percent}`;
+      const track = document.createElement("div");
+      track.className = "budget-track";
+      track.setAttribute("aria-hidden", "true");
+      const fill = document.createElement("div");
+      fill.className = "budget-fill";
+      fill.style.width = `${Number(tenths) / 10}%`;
+      track.append(fill);
+      const deadline = document.createElement("p");
+      deadline.className = "goal-deadline";
+      deadline.append("Желаемая дата: ");
+      const time = document.createElement("time");
+      time.dateTime = goal.date;
+      time.textContent = displayDate(goal.date);
+      deadline.append(time);
+      const status = document.createElement("p");
+      status.className = "goal-state";
+      status.textContent = balance >= target ? "Цель достигнута" : goal.date < today ? "Срок прошёл" : "Копим на цель";
+      card.append(values, progress, track, deadline, status);
+      if (balance > target) {
+        const excess = document.createElement("p");
+        excess.textContent = `Сверх цели: ${money(balance - target)}`;
+        card.append(excess);
+      }
+      fragment.append(card);
+    });
+    byId("goal-list").replaceChildren(fragment);
+  }
+
+  const goalFields = ["goal-name", "goal-description", "goal-target", "goal-initial", "goal-date"];
+  function closeGoalForm() {
+    byId("goal-editor").hidden = true;
+    byId("create-goal").setAttribute("aria-expanded", "false");
+    byId("goal-form").reset();
+    goalFields.forEach((id) => fieldError(id, ""));
+    byId("goal-date-preview").textContent = "";
+    byId("create-goal").focus();
+  }
+  byId("create-goal").addEventListener("click", () => {
+    if (!savingsReadable || savingsWritePending) return;
+    byId("goal-status").textContent = "";
+    byId("goal-editor").hidden = false;
+    byId("create-goal").setAttribute("aria-expanded", "true");
+    byId("goal-name").focus();
+  });
+  byId("cancel-goal").addEventListener("click", () => {
+    if (!savingsWritePending) closeGoalForm();
+  });
+  byId("goal-date").addEventListener("input", () => {
+    const value = byId("goal-date").value;
+    byId("goal-date-preview").textContent = validDate(value) ? displayDate(value) : "";
+  });
+
+  byId("goal-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (savingsWritePending || byId("goal-editor").hidden) return;
+    byId("goal-status").textContent = "";
+    const name = byId("goal-name").value.trim();
+    const description = byId("goal-description").value.trim();
+    const target = parseAmount(byId("goal-target").value);
+    const initialText = byId("goal-initial").value.trim().replace(/[ \u00a0\u202f]/g, "");
+    const initial = /^0+$/.test(initialText) ? 0 : parseAmount(initialText);
+    const date = byId("goal-date").value;
+    fieldError("goal-name", !name || Array.from(name).length > 100 ? "Введите название от 1 до 100 символов." : "");
+    fieldError("goal-description", Array.from(description).length > 1000 ? "Описание — не больше 1 000 символов." : "");
+    fieldError("goal-target", target === null ? "Введите целую сумму от 1 до 9 007 199 254 740 991 ₸." : "");
+    fieldError("goal-initial", initial === null ? "Введите целую сумму от 0 до 9 007 199 254 740 991 ₸." : "");
+    fieldError("goal-date", !validDate(date) ? "Укажите корректную желаемую дату." : "");
+    const invalid = byId("goal-form").querySelector('[aria-invalid="true"]');
+    if (invalid) { invalid.focus(); return; }
+    savingsWritePending = true;
+    renderSavings(new Date());
+    const create = () => {
+      loadSavings();
+      if (!savingsReadable) return;
+      const newId = () => Array.from(crypto.getRandomValues(new Uint32Array(4)), (part) => part.toString(16).padStart(8, "0")).join("");
+      const operations = initial ? [{ id: newId(), type: "initial", amount: initial, date: localDate() }] : [];
+      const goal = { id: newId(), name, description, target, date, operations };
+      const next = { version: 1, goals: [goal, ...savings.goals] };
+      localStorage.setItem(SAVINGS_KEY, JSON.stringify(next));
+      savings = next;
+      closeGoalForm();
+      byId("goal-status").textContent = "Цель создана";
+    };
+    try {
+      if (navigator.locks?.request) await navigator.locks.request(SAVINGS_KEY, create);
+      else create();
+    } catch {
+      savingsError("Не удалось сохранить цель. Введённые поля оставлены, попробуйте снова.");
+    } finally {
+      savingsWritePending = false;
+      renderSavings(new Date());
+      if (byId("goal-editor").hidden) byId("create-goal").focus();
+    }
+  });
 
   function localDate(date = new Date()) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
@@ -474,6 +656,7 @@
 
   function render(resetBudgetInputs = false) {
     const now = new Date();
+    renderSavings(now);
     if (!dateEdited) byId("date").value = localDate(now);
     // Focus listeners pass an event; only an explicit true resets clean inputs.
     renderBudget(now, resetBudgetInputs === true);
@@ -685,7 +868,11 @@
   [start, end].forEach((input) => input.addEventListener("input", () => { markPeriod(""); render(); }));
   byId("date").addEventListener("input", () => { dateEdited = true; });
   window.addEventListener("storage", (event) => {
-    if (event.key !== BUDGET_KEY && event.key !== STORAGE_KEY && event.key !== null) return;
+    if (event.key !== BUDGET_KEY && event.key !== STORAGE_KEY && event.key !== SAVINGS_KEY && event.key !== null) return;
+    if (event.key === SAVINGS_KEY || event.key === null) {
+      loadSavings();
+      byId("goal-status").textContent = "";
+    }
     if (event.key === BUDGET_KEY || event.key === null) {
       loadBudgets();
     }
@@ -695,12 +882,13 @@
     }
     render(event.key === BUDGET_KEY || event.key === null);
   });
-  window.addEventListener("focus", render);
+  window.addEventListener("focus", () => { loadSavings(); render(); });
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") render();
+    if (document.visibilityState === "visible") { loadSavings(); render(); }
   });
   setInterval(render, 60000);
   byId("date").value = localDate();
   load();
+  loadSavings();
   render();
 })();
