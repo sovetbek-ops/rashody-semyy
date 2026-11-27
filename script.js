@@ -15,6 +15,7 @@
 
   function showView(view, focusAmount = false) {
     if (!views[view]) return;
+    render();
     Object.keys(views).forEach((name) => { byId(`view-${name}`).hidden = name !== view; });
     document.querySelectorAll(".nav-button").forEach((button) => {
       if (button.dataset.view === view) button.setAttribute("aria-current", "page");
@@ -132,7 +133,7 @@
   function changeBudget(category, index, remove) {
     const now = new Date();
     if (localDate(now).slice(0, 7) !== budgetMonth) {
-      renderBudget(now);
+      render();
       budgetError("Начался новый месяц. Задайте лимит заново.");
       return;
     }
@@ -148,7 +149,7 @@
       next = readBudgets();
     } catch {
       loadBudgets();
-      renderBudget(now);
+      render();
       return;
     }
     const limits = { ...(next[budgetMonth] || {}) };
@@ -167,7 +168,7 @@
     budgetError("");
     input.value = remove ? "" : String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
     dirtyBudgetInputs.delete(index);
-    renderBudget(now);
+    render();
     status.textContent = remove ? "Лимит убран" : "Лимит сохранён";
   }
 
@@ -471,10 +472,11 @@
     }
   }
 
-  function render() {
+  function render(resetBudgetInputs = false) {
     const now = new Date();
     if (!dateEdited) byId("date").value = localDate(now);
-    renderBudget(now);
+    // Focus listeners pass an event; only an explicit true resets clean inputs.
+    renderBudget(now, resetBudgetInputs === true);
     updateQuickPeriod(now);
     const invalidPeriod = (start.value && !validDate(start.value)) || (end.value && !validDate(end.value)) || (start.value && end.value && start.value > end.value);
     byId("period-error").textContent = invalidPeriod ? "Проверьте период: дата «С» должна быть не позже даты «По»." : "";
@@ -592,6 +594,7 @@
         localStorage.setItem(STORAGE_KEY, serialized);
       } catch {
         storageError("Не удалось сохранить трату. Проверьте доступ к хранилищу браузера и попробуйте снова. Поля сохранены в форме.");
+        render();
         return;
       }
       expenses = next;
@@ -682,15 +685,15 @@
   [start, end].forEach((input) => input.addEventListener("input", () => { markPeriod(""); render(); }));
   byId("date").addEventListener("input", () => { dateEdited = true; });
   window.addEventListener("storage", (event) => {
+    if (event.key !== BUDGET_KEY && event.key !== STORAGE_KEY && event.key !== null) return;
     if (event.key === BUDGET_KEY || event.key === null) {
       loadBudgets();
-      renderBudget(new Date(), true);
     }
     if (event.key === STORAGE_KEY || event.key === null) {
       load();
       byId("delete-status").textContent = "";
-      render();
     }
+    render(event.key === BUDGET_KEY || event.key === null);
   });
   window.addEventListener("focus", render);
   document.addEventListener("visibilitychange", () => {
