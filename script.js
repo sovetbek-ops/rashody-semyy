@@ -281,6 +281,76 @@
       }
     });
     renderOverviewBudget(month, spentByCategory, budgetTotal, spentTotal, remainingTotal, limits.length);
+    renderOverviewAnalytics(now, month, spentByCategory, spentTotal);
+  }
+
+  function renderOverviewAnalytics(now, month, spentByCategory, spentTotal) {
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const dailyTotals = Array(daysInMonth).fill(0n);
+    if (storageReadable) {
+      expenses.forEach((item) => {
+        if (item.date.startsWith(`${month}-`)) dailyTotals[Number(item.date.slice(8)) - 1] += BigInt(item.amount);
+      });
+    }
+    const maximum = dailyTotals.reduce((max, amount) => amount > max ? amount : max, 0n);
+    const state = byId("daily-state");
+    state.textContent = storageReadable ? "В этом месяце трат пока нет" : "Не удалось прочитать траты. Динамика пока недоступна.";
+    state.hidden = storageReadable && spentTotal > 0n;
+    byId("daily-figure").hidden = !storageReadable;
+    byId("daily-scale").textContent = storageReadable ? `Максимум за день: ${money(maximum)}` : "";
+    const chart = document.createDocumentFragment();
+    const dates = document.createDocumentFragment();
+    dailyTotals.forEach((amount, index) => {
+      const day = index + 1;
+      const date = `${month}-${String(day).padStart(2, "0")}`;
+      if (storageReadable) {
+        const column = document.createElement("div");
+        column.className = "day-column";
+        const bar = document.createElement("div");
+        bar.className = "day-bar";
+        bar.style.height = `${maximum ? Number(amount * 10000n / maximum) / 100 : 0}%`;
+        const label = document.createElement("span");
+        label.className = "day-label";
+        label.textContent = day === 1 || day === daysInMonth || (day % 5 === 0 && day <= daysInMonth - 3) ? String(day) : "";
+        column.append(bar, label);
+        chart.append(column);
+      }
+      const row = document.createElement("div");
+      const name = document.createElement("dt");
+      const time = document.createElement("time");
+      time.dateTime = date;
+      time.textContent = displayDate(date);
+      name.append(time);
+      const value = document.createElement("dd");
+      value.textContent = storageReadable ? money(amount) : "—";
+      row.append(name, value);
+      dates.append(row);
+    });
+    byId("daily-chart").style.gridTemplateColumns = `repeat(${daysInMonth}, minmax(0, 1fr))`;
+    byId("daily-chart").replaceChildren(chart);
+    byId("daily-totals").replaceChildren(dates);
+    const categoryRows = document.createDocumentFragment();
+    categories.forEach((category) => {
+      const row = document.createElement("div");
+      const name = document.createElement("dt");
+      name.textContent = category;
+      const value = document.createElement("dd");
+      const amount = spentByCategory.get(category);
+      const sum = document.createElement("span");
+      sum.textContent = storageReadable ? money(amount) : "—";
+      const track = document.createElement("span");
+      track.className = "category-share-track";
+      track.setAttribute("aria-hidden", "true");
+      track.hidden = !storageReadable;
+      const fill = document.createElement("span");
+      fill.className = "category-share-fill";
+      fill.style.width = `${spentTotal ? Number(amount * 10000n / spentTotal) / 100 : 0}%`;
+      track.append(fill);
+      value.append(sum, track);
+      row.append(name, value);
+      categoryRows.append(row);
+    });
+    byId("month-category-totals").replaceChildren(categoryRows);
   }
 
   function renderOverviewBudget(month, spentByCategory, budgetTotal, spentTotal, remainingTotal, limitCount) {

@@ -39,6 +39,26 @@
         </dl>
         <p id="overview-budget-note" class="budget-note">Задайте лимиты в разделе «Бюджет».</p>
         <p id="overview-budget-warning" class="budget-warning" role="status" hidden></p>
+        <div class="overview-analytics">
+          <section class="card" aria-labelledby="daily-heading">
+            <h2 id="daily-heading">Расходы по дням</h2>
+            <p class="budget-note">Каждый столбец — один день текущего месяца.</p>
+            <p id="daily-state" class="analytics-state">В этом месяце трат пока нет</p>
+            <figure id="daily-figure" class="daily-figure" aria-labelledby="daily-heading" aria-describedby="daily-scale">
+              <figcaption id="daily-scale" class="budget-note"></figcaption>
+              <div id="daily-chart" class="daily-chart" aria-hidden="true"></div>
+            </figure>
+            <details class="daily-details">
+              <summary>Суммы по дням</summary>
+              <dl id="daily-totals" class="daily-totals"></dl>
+            </details>
+          </section>
+          <section class="card" aria-labelledby="month-categories-heading">
+            <h2 id="month-categories-heading">Категории месяца</h2>
+            <p class="budget-note">Суммы и доли в расходах текущего месяца.</p>
+            <dl id="month-category-totals" class="month-category-totals"></dl>
+          </section>
+        </div>
         <section class="card" aria-labelledby="overview-budget-heading">
           <div class="section-heading">
             <h2 id="overview-budget-heading">Состояние бюджета</h2>
