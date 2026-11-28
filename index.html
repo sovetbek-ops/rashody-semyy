@@ -237,6 +237,15 @@
             <div class="form-footer"><button id="save-income-edit" class="primary" type="submit">Сохранить</button><button id="cancel-income-edit" type="button">Отмена</button></div>
           </form>
         </section>
+        <section id="income-delete-editor" class="card" aria-labelledby="income-delete-heading" hidden>
+          <h2 id="income-delete-heading">Удалить доход?</h2>
+          <p id="income-delete-name" class="goal-description"></p>
+          <p id="income-delete-details" class="budget-note"></p>
+          <p id="income-delete-comment" class="goal-description" hidden></p>
+          <p>Восстановить запись после удаления нельзя.</p>
+          <p id="income-delete-state" class="error" role="status"></p>
+          <div class="form-footer"><button id="cancel-income-delete" type="button">Отмена</button><button id="confirm-income-delete" class="danger" type="button">Удалить доход</button></div>
+        </section>
         <section class="card" aria-labelledby="income-history-heading">
           <div class="section-heading"><h2 id="income-history-heading" tabindex="-1">История доходов</h2><span id="income-count"></span></div>
           <fieldset>

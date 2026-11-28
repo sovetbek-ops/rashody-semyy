@@ -82,6 +82,94 @@
   let incomeEditId = null;
   let incomeEditSnapshot = null;
   let incomeEditConflict = false;
+  let incomeDeleteId = null;
+  let incomeDeleteSnapshot = null;
+  let incomeDeleteConflict = false;
+
+  function renderIncomeDelete() {
+    const record = incomesReadable ? incomes.records.find((item) => item.id === incomeDeleteId) : null;
+    if (incomeDeleteId !== null && incomesReadable && (!record || JSON.stringify(record) !== incomeDeleteSnapshot)) {
+      incomeDeleteConflict = true;
+    }
+    byId("confirm-income-delete").disabled = incomeWritePending || !incomesReadable || incomeDeleteConflict;
+    byId("cancel-income-delete").disabled = incomeWritePending;
+    byId("income-delete-state").textContent = incomeDeleteId === null ? "" : !incomesReadable
+      ? "Доходы недоступны. Удаление приостановлено. Попробуйте обновить страницу."
+      : incomeDeleteConflict ? record
+        ? "Доход изменился. Откройте удаление заново и проверьте данные."
+        : "Этот доход уже удалён. Повторное удаление недоступно."
+      : "";
+  }
+
+  function closeIncomeDelete() {
+    const id = incomeDeleteId;
+    incomeDeleteId = null;
+    incomeDeleteSnapshot = null;
+    incomeDeleteConflict = false;
+    byId("income-delete-editor").hidden = true;
+    byId("income-delete-name").textContent = "";
+    byId("income-delete-details").textContent = "";
+    byId("income-delete-comment").textContent = "";
+    renderIncomeDelete();
+    return id;
+  }
+
+  function openIncomeDelete(id) {
+    if (incomeWritePending) return;
+    loadIncomes();
+    renderIncomes();
+    const record = incomesReadable ? incomes.records.find((item) => item.id === id) : null;
+    if (!record) return;
+    incomeDeleteId = id;
+    incomeDeleteSnapshot = JSON.stringify(record);
+    incomeDeleteConflict = false;
+    byId("income-status").textContent = "";
+    byId("income-delete-name").textContent = record.name;
+    byId("income-delete-details").textContent = `${money(record.amount)} · ${displayDate(record.date)}`;
+    byId("income-delete-comment").textContent = record.comment;
+    byId("income-delete-comment").hidden = !record.comment;
+    byId("income-delete-editor").hidden = false;
+    renderIncomeDelete();
+    byId("cancel-income-delete").focus();
+  }
+
+  byId("cancel-income-delete").addEventListener("click", () => {
+    if (incomeWritePending || incomeDeleteId === null) return;
+    const id = closeIncomeDelete();
+    if (!byId("view-incomes").hidden) {
+      (byId(`income-delete-${id}`) || byId("income-history-heading")).focus();
+    }
+  });
+  byId("confirm-income-delete").addEventListener("click", async () => {
+    if (incomeWritePending || incomeDeleteId === null || incomeDeleteConflict || !incomesReadable) return;
+    const id = incomeDeleteId;
+    byId("income-status").textContent = "";
+    incomeWritePending = true;
+    let removed = false;
+    renderIncomes();
+    try {
+      const remove = () => {
+        loadIncomes();
+        renderIncomeDelete();
+        if (!incomesReadable || incomeDeleteConflict) return;
+        const next = { version: 1, records: incomes.records.filter((record) => record.id !== id) };
+        localStorage.setItem(INCOME_KEY, JSON.stringify(next));
+        incomes = next;
+        closeIncomeDelete();
+        if (incomeEditId === id) closeIncomeEdit();
+        removed = true;
+        byId("income-status").textContent = "Доход удалён";
+      };
+      if (navigator.locks?.request) await navigator.locks.request(INCOME_KEY, remove);
+      else remove();
+    } catch {
+      incomeStorageError("Не удалось сохранить удаление дохода. Запись осталась в истории. Попробуйте снова.");
+    } finally {
+      incomeWritePending = false;
+      renderIncomes();
+      if (removed && !byId("view-incomes").hidden) byId("income-history-heading").focus();
+    }
+  });
 
   function renderIncomeEdit() {
     const record = incomesReadable ? incomes.records.find((item) => item.id === incomeEditId) : null;
@@ -242,7 +330,11 @@
   function renderIncomes() {
     updateIncomeDates();
     renderIncomeEdit();
+    renderIncomeDelete();
     document.querySelectorAll("[data-income-edit]").forEach((button) => {
+      button.disabled = incomeWritePending || !incomesReadable;
+    });
+    document.querySelectorAll("[data-income-delete]").forEach((button) => {
       button.disabled = incomeWritePending || !incomesReadable;
     });
     incomeFields.forEach((id) => { byId(id).disabled = incomeWritePending; });
@@ -301,6 +393,17 @@
       edit.disabled = incomeWritePending;
       edit.addEventListener("click", () => openIncomeEdit(record.id));
       actions.append(edit);
+      const remove = document.createElement("button");
+      remove.id = `income-delete-${record.id}`;
+      remove.type = "button";
+      remove.className = "danger";
+      remove.textContent = "Удалить";
+      remove.setAttribute("data-income-delete", record.id);
+      remove.setAttribute("aria-controls", "income-delete-editor");
+      remove.setAttribute("aria-label", `Удалить доход: ${record.name}, ${money(record.amount)}, ${displayDate(record.date)}`);
+      remove.disabled = incomeWritePending;
+      remove.addEventListener("click", () => openIncomeDelete(record.id));
+      actions.append(remove);
       row.append(actions);
       fragment.append(row);
     });
