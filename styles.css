@@ -23,6 +23,7 @@ body { margin: 0; }
 nav { display: grid; gap: 8px; }
 .nav-button { display: flex; align-items: center; gap: 10px; width: 100%; border-color: transparent; text-align: left; color: var(--muted); }
 .nav-button > span:first-child { font-size: 22px; width: 24px; text-align: center; }
+.nav-button[data-view="obligations"] { flex-wrap: wrap; overflow-wrap: anywhere; }
 .nav-button[aria-current="page"] { background: var(--sage); color: #194d36; border-color: #c6dacd; }
 .nav-current { display: none; margin-left: auto; font-size: 10px; }
 [aria-current="page"] .nav-current { display: inline; }

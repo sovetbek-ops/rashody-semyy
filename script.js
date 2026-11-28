@@ -5,6 +5,7 @@
   const BUDGET_KEY = "family-budgets-v1";
   const SAVINGS_KEY = "family-savings-v1";
   const INCOME_KEY = "family-incomes-v1";
+  const OBLIGATION_KEY = "family-obligations-v1";
   const categories = ["Продукты", "Транспорт", "Кредит", "Ипотека", "Расходы на секцию ребёнка"];
   const removedCategories = ["Дом", "Другое"];
   const savedCategories = [...categories, "Еда", ...removedCategories];
@@ -14,7 +15,8 @@
     expenses: ["Траты", "Записывайте расходы и выбирайте период просмотра."],
     budget: ["Бюджет", "Планируйте расходы и следите за лимитами месяца."],
     savings: ["Накопления", "Деньги на цели учитываются отдельно от расходов"],
-    incomes: ["Доходы", "Записывайте поступления семьи из любых источников."]
+    incomes: ["Доходы", "Записывайте поступления семьи из любых источников."],
+    obligations: ["Обязательные платежи", "Планируйте обязательные расходы семьи."]
   };
 
   function showView(view, focusAmount = false) {
@@ -274,6 +276,202 @@
       incomeWritePending = false;
       renderIncomes();
       if (saved) focusIncomeEditAction(id);
+    }
+  });
+
+  const obligationFrequencies = { once: "Один раз", monthly: "Каждый месяц", quarterly: "Каждые 3 месяца", yearly: "Каждый год" };
+  const obligationFields = ["obligation-name", "obligation-amount", "obligation-date", "obligation-frequency"];
+  let obligations = { version: 1, rules: [], payments: [] };
+  let obligationsReadable = true;
+  let obligationWritePending = false;
+  let obligationDateEdited = false;
+  let obligationConfirmation = null;
+  let renderedObligations = "";
+
+  function obligationStorageError(message) {
+    byId("obligation-storage-error").textContent = message;
+    byId("obligation-storage-error").hidden = !message;
+  }
+
+  function loadObligations() {
+    try {
+      const raw = localStorage.getItem(OBLIGATION_KEY);
+      const saved = raw === null ? { version: 1, rules: [], payments: [] } : JSON.parse(raw);
+      const ruleIds = new Set();
+      const paymentIds = new Set();
+      const occurrences = new Set();
+      if (!saved || saved.version !== 1 || !Array.isArray(saved.rules) || !Array.isArray(saved.payments) ||
+        !saved.rules.every((rule) => {
+          if (!rule || typeof rule.id !== "string" || !rule.id || ruleIds.has(rule.id) ||
+            typeof rule.name !== "string" || !rule.name.trim() || Array.from(rule.name).length > 100 ||
+            !Number.isSafeInteger(rule.amount) || rule.amount <= 0 || !validDate(rule.date) ||
+            !Object.hasOwn(obligationFrequencies, rule.frequency)) return false;
+          ruleIds.add(rule.id);
+          return true;
+        }) || !saved.payments.every((payment) => {
+          if (!payment || typeof payment.id !== "string" || !payment.id || paymentIds.has(payment.id) ||
+            !ruleIds.has(payment.ruleId) || !validDate(payment.date) ||
+            !Number.isSafeInteger(payment.amount) || payment.amount <= 0 ||
+            !["unpaid", "paid"].includes(payment.status) ||
+            (payment.status === "paid" ? !validDate(payment.paidDate) : payment.paidDate !== null)) return false;
+          const occurrence = `${payment.ruleId}:${payment.date}`;
+          if (occurrences.has(occurrence)) return false;
+          occurrences.add(occurrence);
+          paymentIds.add(payment.id);
+          return true;
+        })) throw new Error("Invalid obligation data");
+      obligations = saved;
+      obligationsReadable = true;
+      obligationStorageError("");
+    } catch {
+      obligationsReadable = false;
+      obligationStorageError("Не удалось прочитать обязательные платежи. Изменения приостановлены, чтобы не потерять данные. Попробуйте обновить страницу.");
+    }
+  }
+
+  // Always derive each occurrence from the original day, including after February.
+  function initialObligationDates(date, frequency, today) {
+    const dates = [date];
+    if (frequency === "once") return dates;
+    const interval = { monthly: 1, quarterly: 3, yearly: 12 }[frequency];
+    const [year, month, day] = date.split("-").map(Number);
+    const firstMonth = year * 12 + month - 1;
+    const [currentYear, currentMonth] = today.split("-").map(Number);
+    const lastMonth = currentYear * 12 + currentMonth - 1;
+    for (let target = firstMonth + interval; target <= lastMonth; target += interval) {
+      const targetYear = Math.floor(target / 12);
+      const targetMonth = target % 12 + 1;
+      const leap = targetYear % 4 === 0 && (targetYear % 100 !== 0 || targetYear % 400 === 0);
+      const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+      dates.push(`${String(targetYear).padStart(4, "0")}-${String(targetMonth).padStart(2, "0")}-${String(Math.min(day, days[targetMonth - 1])).padStart(2, "0")}`);
+    }
+    return dates;
+  }
+
+  function renderObligations() {
+    const today = localDate();
+    if (!obligationDateEdited && !obligationConfirmation) byId("obligation-date").value = today;
+    const date = byId("obligation-date").value;
+    byId("obligation-date-display").textContent = validDate(date) ? `Выбрано: ${displayDate(date)}` : "";
+    obligationFields.forEach((id) => { byId(id).disabled = obligationWritePending || Boolean(obligationConfirmation); });
+    byId("preview-obligation").disabled = obligationWritePending || !obligationsReadable || Boolean(obligationConfirmation);
+    byId("confirm-obligation").disabled = obligationWritePending || !obligationsReadable;
+    byId("cancel-obligation").disabled = obligationWritePending;
+    byId("obligation-confirmation").hidden = !obligationConfirmation;
+    if (obligationConfirmation) {
+      const pending = obligationConfirmation;
+      byId("obligation-confirm-name").textContent = `${pending.name} — ${money(pending.amount)}`;
+      byId("obligation-confirm-details").textContent = `${obligationFrequencies[pending.frequency]}. Сроки: ${displayDate(pending.dates[0])}${pending.dates.length > 1 ? ` — ${displayDate(pending.dates[pending.dates.length - 1])}` : ""}.`;
+      byId("obligation-confirm-total").textContent = `Платежей: ${pending.dates.length}. Сумма для резерва: ${money(BigInt(pending.amount) * BigInt(pending.dates.length))}`;
+    }
+    byId("obligation-count").textContent = `Записей: ${obligationsReadable ? obligations.payments.length : "—"}`;
+    byId("obligation-empty").textContent = obligationsReadable ? "Пока нет обязательных платежей" : "Не удалось прочитать платежи. Список недоступен.";
+    byId("obligation-empty").hidden = obligationsReadable && obligations.payments.length > 0;
+    const signature = JSON.stringify([obligationsReadable, obligations, today]);
+    if (signature === renderedObligations) return;
+    renderedObligations = signature;
+    const fragment = document.createDocumentFragment();
+    const rules = new Map(obligations.rules.map((rule) => [rule.id, rule]));
+    const payments = obligationsReadable ? [...obligations.payments].sort((a, b) =>
+      Number(a.status === "paid") - Number(b.status === "paid") || a.date.localeCompare(b.date)) : [];
+    payments.forEach((payment) => {
+      const rule = rules.get(payment.ruleId);
+      const item = document.createElement("li");
+      item.className = "recent-expense";
+      const name = document.createElement("strong");
+      name.textContent = rule.name;
+      const amount = document.createElement("strong");
+      amount.className = "recent-amount";
+      amount.textContent = money(payment.amount);
+      const details = document.createElement("span");
+      details.className = "recent-date";
+      details.textContent = `Срок: ${displayDate(payment.date)} · ${obligationFrequencies[rule.frequency]}`;
+      const status = document.createElement("p");
+      status.className = "recent-comment";
+      status.textContent = payment.status === "paid" ? `Оплачен: ${displayDate(payment.paidDate)}` : `Не оплачен${payment.date < today ? " · Просрочен" : ""}`;
+      item.append(name, amount, details, status);
+      fragment.append(item);
+    });
+    byId("obligation-list").replaceChildren(fragment);
+  }
+
+  byId("obligation-date").addEventListener("input", () => { obligationDateEdited = true; renderObligations(); });
+  byId("obligation-form").addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (obligationWritePending || obligationConfirmation || !obligationsReadable) return;
+    renderObligations();
+    byId("obligation-status").textContent = "";
+    const name = byId("obligation-name").value.trim();
+    const amount = parseAmount(byId("obligation-amount").value);
+    const date = byId("obligation-date").value;
+    const frequency = byId("obligation-frequency").value;
+    fieldError("obligation-name", !name || Array.from(name).length > 100 ? "Введите название от 1 до 100 символов." : "");
+    fieldError("obligation-amount", amount === null ? "Введите положительную целую сумму до 9 007 199 254 740 991 ₸." : "");
+    fieldError("obligation-date", validDate(date) ? "" : "Укажите корректную дату.");
+    fieldError("obligation-frequency", Object.hasOwn(obligationFrequencies, frequency) ? "" : "Выберите периодичность.");
+    const invalid = obligationFields.find((id) => byId(id).getAttribute("aria-invalid") === "true");
+    if (invalid) { byId(invalid).focus(); return; }
+    obligationConfirmation = { name, amount, date, frequency, month: localDate().slice(0, 7), dates: initialObligationDates(date, frequency, localDate()) };
+    renderObligations();
+    byId("cancel-obligation").focus();
+  });
+  byId("cancel-obligation").addEventListener("click", () => {
+    if (obligationWritePending) return;
+    obligationConfirmation = null;
+    // Cancellation preserves the exact date the user reviewed, even across midnight.
+    obligationDateEdited = true;
+    renderObligations();
+    byId("preview-obligation").focus();
+  });
+  byId("confirm-obligation").addEventListener("click", async () => {
+    if (obligationWritePending || !obligationConfirmation || !obligationsReadable) return;
+    const pending = obligationConfirmation;
+    if (pending.month !== localDate().slice(0, 7)) {
+      pending.month = localDate().slice(0, 7);
+      pending.dates = initialObligationDates(pending.date, pending.frequency, localDate());
+      renderObligations();
+      obligationStorageError("Начался новый месяц. Проверьте число платежей и подтвердите создание заново.");
+      byId("cancel-obligation").focus();
+      return;
+    }
+    obligationWritePending = true;
+    renderObligations();
+    let saved = false;
+    try {
+      const create = () => {
+        loadObligations();
+        if (!obligationsReadable) return;
+        // A lock can be acquired after midnight: never save an unreviewed count.
+        if (pending.month !== localDate().slice(0, 7)) {
+          obligationStorageError("Начался новый месяц. Проверьте число платежей и подтвердите создание заново.");
+          return;
+        }
+        const ids = new Set([...obligations.rules, ...obligations.payments].map((item) => item.id));
+        const uniqueId = () => {
+          let id;
+          do { id = savingsId(); } while (ids.has(id));
+          ids.add(id);
+          return id;
+        };
+        const rule = { id: uniqueId(), name: pending.name, amount: pending.amount, date: pending.date, frequency: pending.frequency };
+        const payments = pending.dates.map((date) => ({ id: uniqueId(), ruleId: rule.id, amount: rule.amount, date, status: "unpaid", paidDate: null }));
+        const next = { version: 1, rules: [...obligations.rules, rule], payments: [...obligations.payments, ...payments] };
+        localStorage.setItem(OBLIGATION_KEY, JSON.stringify(next));
+        obligations = next;
+        obligationConfirmation = null;
+        byId("obligation-form").reset();
+        obligationDateEdited = false;
+        byId("obligation-status").textContent = `Платежи созданы: ${payments.length}`;
+        saved = true;
+      };
+      if (navigator.locks?.request) await navigator.locks.request(OBLIGATION_KEY, create);
+      else create();
+    } catch {
+      obligationStorageError("Не удалось сохранить обязательные платежи. Введённые данные оставлены. Попробуйте снова.");
+    } finally {
+      obligationWritePending = false;
+      renderObligations();
+      if (!byId("view-obligations").hidden) byId(saved ? "obligation-name" : "cancel-obligation").focus();
     }
   });
 
@@ -1525,6 +1723,7 @@
 
   function render(resetBudgetInputs = false) {
     const now = new Date();
+    renderObligations();
     renderIncomes();
     renderSavings(now);
     if (!dateEdited) byId("date").value = localDate(now);
@@ -1758,13 +1957,20 @@
     }
     render(event.key === BUDGET_KEY || event.key === null);
   });
-  window.addEventListener("focus", () => { loadIncomes(); loadSavings(); render(); });
+  window.addEventListener("storage", (event) => {
+    if (event.key !== OBLIGATION_KEY && event.key !== null) return;
+    loadObligations();
+    byId("obligation-status").textContent = "";
+    renderObligations();
+  });
+  window.addEventListener("focus", () => { loadObligations(); loadIncomes(); loadSavings(); render(); });
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") { loadIncomes(); loadSavings(); render(); }
+    if (document.visibilityState === "visible") { loadObligations(); loadIncomes(); loadSavings(); render(); }
   });
   setInterval(render, 60000);
   byId("date").value = localDate();
   byId("income-date").value = localDate();
+  loadObligations();
   loadIncomes();
   load();
   loadSavings();

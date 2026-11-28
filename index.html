@@ -18,6 +18,7 @@
         <button type="button" class="nav-button" data-view="budget" aria-controls="view-budget"><span aria-hidden="true">▤</span>Бюджет<span class="nav-current" aria-hidden="true">Выбран</span></button>
         <button type="button" class="nav-button" data-view="savings" aria-controls="view-savings"><span aria-hidden="true">◎</span>Накопления<span class="nav-current" aria-hidden="true">Выбран</span></button>
         <button type="button" class="nav-button" data-view="incomes" aria-controls="view-incomes"><span aria-hidden="true">＋</span>Доходы<span class="nav-current" aria-hidden="true">Выбран</span></button>
+        <button type="button" class="nav-button" data-view="obligations" aria-controls="view-obligations"><span aria-hidden="true">▣</span>Обязательные платежи<span class="nav-current" aria-hidden="true">Выбран</span></button>
       </nav>
       <p class="sidebar-note">Ваш семейный бюджет.<br>На вашем устройстве.</p>
     </aside>
@@ -32,6 +33,7 @@
         <p id="budget-expenses-error" class="error" role="alert" hidden></p>
         <p id="savings-error" class="error" role="alert" hidden></p>
         <p id="income-storage-error" class="error" role="alert" hidden></p>
+        <p id="obligation-storage-error" class="error" role="alert" hidden></p>
       </div>
       <section id="view-overview" aria-label="Обзор">
         <div class="overview-month"><p class="eyebrow">ТЕКУЩИЙ МЕСЯЦ</p><p id="month-label"></p></div>
@@ -209,6 +211,35 @@
         </section>
         <p id="goals-state" class="analytics-state">Пока нет целей</p>
         <div id="goal-list" class="goal-list"></div>
+      </section>
+      <section id="view-obligations" aria-label="Обязательные платежи" hidden>
+        <section class="card" aria-labelledby="obligation-form-heading">
+          <h2 id="obligation-form-heading">Добавить платёж</h2>
+          <p id="obligation-limits" class="budget-note">Сохранённые платежи пока нельзя изменить или удалить. Сейчас доступны создание и просмотр; оплата, расчёт доступных денег и автоматическое повторение ещё не включены.</p>
+          <form id="obligation-form" novalidate aria-describedby="obligation-limits">
+            <div class="form-grid">
+              <div class="field"><label for="obligation-name">Название</label><input id="obligation-name" type="text" required aria-describedby="obligation-name-error"><p id="obligation-name-error" class="error" hidden></p></div>
+              <div class="field"><label for="obligation-amount">Сумма, ₸</label><input id="obligation-amount" type="text" inputmode="numeric" required aria-describedby="obligation-amount-error"><p id="obligation-amount-error" class="error" hidden></p></div>
+              <div class="field"><label for="obligation-date">Дата оплаты по плану</label><input id="obligation-date" type="date" required aria-describedby="obligation-date-display obligation-date-error"><p id="obligation-date-display" class="budget-note"></p><p id="obligation-date-error" class="error" hidden></p></div>
+              <div class="field"><label for="obligation-frequency">Периодичность</label><select id="obligation-frequency" aria-describedby="obligation-frequency-error"><option value="once">Один раз</option><option value="monthly">Каждый месяц</option><option value="quarterly">Каждые 3 месяца</option><option value="yearly">Каждый год</option></select><p id="obligation-frequency-error" class="error" hidden></p></div>
+            </div>
+            <div class="form-footer"><button id="preview-obligation" class="primary" type="submit">Добавить</button><p id="obligation-status" class="savings-status" role="status"></p></div>
+          </form>
+          <section id="obligation-confirmation" class="withdraw-confirmation" aria-labelledby="obligation-confirm-heading" hidden>
+            <h3 id="obligation-confirm-heading">Создать платежи?</h3>
+            <p id="obligation-confirm-name" class="goal-description"></p>
+            <p id="obligation-confirm-details" class="goal-description"></p>
+            <p id="obligation-confirm-total" class="goal-description"></p>
+            <p class="budget-note">Будут созданы неоплаченные платежи. Изменить или удалить их пока нельзя.</p>
+            <div class="form-footer"><button id="cancel-obligation" type="button">Отмена</button><button id="confirm-obligation" class="primary" type="button">Создать платежи</button></div>
+          </section>
+        </section>
+        <section class="card" aria-labelledby="obligation-list-heading">
+          <div class="section-heading"><h2 id="obligation-list-heading" tabindex="-1">Платежи</h2><span id="obligation-count"></span></div>
+          <p class="budget-note">Все созданные неоплаченные платежи, включая будущие и просроченные.</p>
+          <p id="obligation-empty" class="analytics-state">Пока нет обязательных платежей</p>
+          <ul id="obligation-list" class="recent-expenses" aria-label="Обязательные платежи"></ul>
+        </section>
       </section>
       <section id="view-incomes" aria-label="Доходы" hidden>
         <section class="card" aria-labelledby="income-form-heading">
