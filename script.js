@@ -78,6 +78,116 @@
   const incomeStart = byId("income-period-start");
   const incomeEnd = byId("income-period-end");
   const incomeFields = ["income-name", "income-amount", "income-date", "income-comment"];
+  const incomeEditFields = ["income-edit-name", "income-edit-amount", "income-edit-date", "income-edit-comment"];
+  let incomeEditId = null;
+  let incomeEditSnapshot = null;
+  let incomeEditConflict = false;
+
+  function renderIncomeEdit() {
+    const record = incomesReadable ? incomes.records.find((item) => item.id === incomeEditId) : null;
+    if (incomeEditId !== null && incomesReadable && (!record || JSON.stringify(record) !== incomeEditSnapshot)) {
+      incomeEditConflict = true;
+    }
+    incomeEditFields.forEach((id) => { byId(id).disabled = incomeWritePending; });
+    byId("save-income-edit").disabled = incomeWritePending || !incomesReadable || incomeEditConflict;
+    byId("cancel-income-edit").disabled = incomeWritePending;
+    byId("income-edit-state").textContent = incomeEditId === null ? "" : !incomesReadable
+      ? "Доходы недоступны. Изменения приостановлены, введённые поля оставлены."
+      : incomeEditConflict ? record
+        ? "Доход изменился в другой вкладке. Откройте его заново и проверьте данные. Введённые поля оставлены."
+        : "Доход удалён в другой вкладке. Введённые поля оставлены, сохранить их в эту запись нельзя."
+      : "";
+    const date = byId("income-edit-date").value;
+    byId("income-edit-date-display").textContent = validDate(date) ? displayDate(date) : "";
+  }
+
+  function focusIncomeEditAction(id) {
+    if (!byId("view-incomes").hidden) {
+      (byId(`income-edit-${id}`) || byId("income-history-heading")).focus();
+    }
+  }
+
+  function closeIncomeEdit() {
+    const id = incomeEditId;
+    incomeEditId = null;
+    incomeEditSnapshot = null;
+    incomeEditConflict = false;
+    byId("income-edit-editor").hidden = true;
+    byId("income-edit-form").reset();
+    incomeEditFields.forEach((field) => fieldError(field, ""));
+    renderIncomeEdit();
+    return id;
+  }
+
+  function openIncomeEdit(id) {
+    if (incomeWritePending) return;
+    loadIncomes();
+    renderIncomes();
+    const record = incomesReadable ? incomes.records.find((item) => item.id === id) : null;
+    if (!record) return;
+    incomeEditId = id;
+    incomeEditSnapshot = JSON.stringify(record);
+    incomeEditConflict = false;
+    byId("income-status").textContent = "";
+    byId("income-edit-original").textContent = `${record.name} · ${money(record.amount)} · ${displayDate(record.date)}`;
+    byId("income-edit-name").value = record.name;
+    byId("income-edit-amount").value = String(record.amount).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    byId("income-edit-date").value = record.date;
+    byId("income-edit-comment").value = record.comment;
+    incomeEditFields.forEach((field) => fieldError(field, ""));
+    byId("income-edit-editor").hidden = false;
+    renderIncomeEdit();
+    byId("income-edit-name").focus();
+  }
+
+  byId("income-edit-date").addEventListener("input", renderIncomeEdit);
+  byId("cancel-income-edit").addEventListener("click", () => {
+    if (incomeWritePending || incomeEditId === null) return;
+    const id = closeIncomeEdit();
+    focusIncomeEditAction(id);
+  });
+  byId("income-edit-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (incomeWritePending || incomeEditId === null || incomeEditConflict || !incomesReadable) return;
+    updateIncomeDates();
+    byId("income-status").textContent = "";
+    const name = byId("income-edit-name").value.trim();
+    const amount = parseAmount(byId("income-edit-amount").value);
+    const date = byId("income-edit-date").value;
+    const comment = byId("income-edit-comment").value.trim();
+    fieldError("income-edit-name", !name || Array.from(name).length > 100 ? "Введите название от 1 до 100 символов." : "");
+    fieldError("income-edit-amount", amount === null ? "Введите положительную целую сумму до 9 007 199 254 740 991 ₸." : "");
+    fieldError("income-edit-date", validDate(date) ? "" : "Укажите корректную дату.");
+    fieldError("income-edit-comment", Array.from(comment).length > 1000 ? "Комментарий — не больше 1 000 символов." : "");
+    const invalid = incomeEditFields.find((id) => byId(id).getAttribute("aria-invalid") === "true");
+    if (invalid) { byId(invalid).focus(); return; }
+    const id = incomeEditId;
+    incomeWritePending = true;
+    let saved = false;
+    renderIncomes();
+    try {
+      const edit = () => {
+        loadIncomes();
+        renderIncomeEdit();
+        if (!incomesReadable || incomeEditConflict) return;
+        const next = { version: 1, records: incomes.records.map((record) =>
+          record.id === id ? { ...record, name, amount, date, comment } : record) };
+        localStorage.setItem(INCOME_KEY, JSON.stringify(next));
+        incomes = next;
+        closeIncomeEdit();
+        saved = true;
+        byId("income-status").textContent = "Доход изменён";
+      };
+      if (navigator.locks?.request) await navigator.locks.request(INCOME_KEY, edit);
+      else edit();
+    } catch {
+      incomeStorageError("Не удалось сохранить изменения дохода. Введённые поля оставлены. Попробуйте снова.");
+    } finally {
+      incomeWritePending = false;
+      renderIncomes();
+      if (saved) focusIncomeEditAction(id);
+    }
+  });
 
   function incomeStorageError(message) {
     byId("income-storage-error").textContent = message;
@@ -131,6 +241,10 @@
 
   function renderIncomes() {
     updateIncomeDates();
+    renderIncomeEdit();
+    document.querySelectorAll("[data-income-edit]").forEach((button) => {
+      button.disabled = incomeWritePending || !incomesReadable;
+    });
     incomeFields.forEach((id) => { byId(id).disabled = incomeWritePending; });
     byId("add-income").disabled = incomeWritePending || !incomesReadable;
     const date = byId("income-date").value;
@@ -175,6 +289,19 @@
         comment.textContent = record.comment;
         row.append(comment);
       }
+      const actions = document.createElement("div");
+      actions.className = "goal-actions income-actions";
+      const edit = document.createElement("button");
+      edit.id = `income-edit-${record.id}`;
+      edit.type = "button";
+      edit.textContent = "Изменить";
+      edit.setAttribute("data-income-edit", record.id);
+      edit.setAttribute("aria-controls", "income-edit-editor");
+      edit.setAttribute("aria-label", `Изменить доход: ${record.name}, ${money(record.amount)}, ${displayDate(record.date)}`);
+      edit.disabled = incomeWritePending;
+      edit.addEventListener("click", () => openIncomeEdit(record.id));
+      actions.append(edit);
+      row.append(actions);
       fragment.append(row);
     });
     byId("income-list").replaceChildren(fragment);

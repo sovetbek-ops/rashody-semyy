@@ -190,6 +190,7 @@ textarea { display: block; width: 100%; min-width: 0; min-height: 96px; padding:
 .goal-progress, .goal-deadline, .goal-state { margin: 12px 0 0; overflow-wrap: anywhere; }
 .goal-state { font-weight: 650; }
 .goal-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 24px; }
+.income-actions { grid-column: 1 / -1; margin-top: 8px; }
 .history-list { list-style: none; padding: 0; margin: 0; }
 .history-entry { padding: 16px 0; border-top: 1px solid var(--border); overflow-wrap: anywhere; }
 .history-entry p { margin: 6px 0; }

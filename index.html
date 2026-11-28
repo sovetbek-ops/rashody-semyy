@@ -223,6 +223,20 @@
             <div class="form-footer"><button id="add-income" class="primary" type="submit">Добавить</button><p id="income-status" class="savings-status" role="status"></p></div>
           </form>
         </section>
+        <section id="income-edit-editor" class="card" aria-labelledby="income-edit-heading" hidden>
+          <h2 id="income-edit-heading">Изменить доход</h2>
+          <p id="income-edit-original" class="budget-note"></p>
+          <form id="income-edit-form" novalidate>
+            <div class="form-grid">
+              <div class="field"><label for="income-edit-name">Название</label><input id="income-edit-name" type="text" required aria-describedby="income-edit-name-error"><p id="income-edit-name-error" class="error" hidden></p></div>
+              <div class="field"><label for="income-edit-amount">Сумма, ₸</label><input id="income-edit-amount" type="text" inputmode="numeric" required aria-describedby="income-edit-amount-error"><p id="income-edit-amount-error" class="error" hidden></p></div>
+              <div class="field"><label for="income-edit-date">Дата получения</label><input id="income-edit-date" type="date" required aria-describedby="income-edit-date-display income-edit-date-error"><p id="income-edit-date-display" class="budget-note"></p><p id="income-edit-date-error" class="error" hidden></p></div>
+              <div class="field"><label for="income-edit-comment">Комментарий <span>необязательно</span></label><textarea id="income-edit-comment" rows="3" aria-describedby="income-edit-comment-error"></textarea><p id="income-edit-comment-error" class="error" hidden></p></div>
+            </div>
+            <p id="income-edit-state" class="error" role="status"></p>
+            <div class="form-footer"><button id="save-income-edit" class="primary" type="submit">Сохранить</button><button id="cancel-income-edit" type="button">Отмена</button></div>
+          </form>
+        </section>
         <section class="card" aria-labelledby="income-history-heading">
           <div class="section-heading"><h2 id="income-history-heading" tabindex="-1">История доходов</h2><span id="income-count"></span></div>
           <fieldset>
