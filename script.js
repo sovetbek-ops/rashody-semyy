@@ -3,12 +3,13 @@
 (() => {
   const STORAGE_KEY = "family-expenses-v1";
   const BUDGET_KEY = "family-budgets-v1";
+  const DAILY_KEY = "family-daily-budgets-v1";
   const SAVINGS_KEY = "family-savings-v1";
   const INCOME_KEY = "family-incomes-v1";
   const OBLIGATION_KEY = "family-obligations-v1";
-  const categories = ["Продукты", "Транспорт", "Кредит", "Ипотека", "Расходы на секцию ребёнка"];
-  const removedCategories = ["Дом", "Другое"];
-  const savedCategories = [...categories, "Еда", ...removedCategories];
+  let categories = [];
+  let daily = { version: 1, articles: [], expenses: [], legacyBudgets: {} };
+  const categoryName = (id) => daily.articles.find((article) => article.id === id)?.name || "Статья недоступна";
   const byId = (id) => document.getElementById(id);
   const views = {
     overview: ["Обзор", "Расходы семьи за текущий месяц."],
@@ -42,16 +43,14 @@
   const start = byId("period-start");
   const end = byId("period-end");
   let expenses = [];
-  let storageReadable = true;
+  let storageReadable = false;
   let selectedExpense = null;
   let savedSnapshot = null;
   let activePeriod = "all";
   let budgets = {};
-  let budgetsReadable = true;
-  let budgetMonth = "";
+  let budgetsReadable = false;
   let expenseWritePending = false;
   let dateEdited = false;
-  const dirtyBudgetInputs = new Set();
   let renderedExpenses = [];
   let renderedSelection = null;
   let renderedStorageReadable = true;
@@ -1529,165 +1528,220 @@
     byId("budget-error").hidden = !message;
   }
 
-  function readBudgets() {
-    const raw = localStorage.getItem(BUDGET_KEY);
-    const saved = raw === null ? {} : JSON.parse(raw);
-    const isObject = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
-    if (!isObject(saved) || !Object.entries(saved).every(([month, limits]) =>
-      /^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(month) && isObject(limits) &&
-      Object.entries(limits).every(([category, amount]) => savedCategories.includes(category) && Number.isSafeInteger(amount) && amount > 0))) {
-      throw new Error("Invalid saved budgets");
-    }
-    const updated = {};
-    Object.entries(saved).forEach(([month, limits]) => {
-      const next = { ...limits };
-      // A newer Products limit takes precedence if both names are present.
-      if (next["Еда"] !== undefined && next["Продукты"] === undefined) next["Продукты"] = next["Еда"];
-      delete next["Еда"];
-      removedCategories.forEach((category) => delete next[category]);
-      if (Object.keys(next).length) updated[month] = next;
+  function validLimits(saved) {
+    return saved && typeof saved === "object" && !Array.isArray(saved) &&
+      Object.entries(saved).every(([month, limits]) =>
+        /^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(month) && limits &&
+        typeof limits === "object" && !Array.isArray(limits) &&
+        Object.entries(limits).every(([name, amount]) => name.trim().length > 0 &&
+          Number.isSafeInteger(amount) && amount > 0));
+  }
+
+  function validExpense(item) {
+    return item && Number.isSafeInteger(item.amount) && item.amount > 0 &&
+      typeof item.category === "string" && validDate(item.date) && typeof item.comment === "string";
+  }
+
+  function validateDaily(saved) {
+    if (!saved || saved.version !== 1 || !Array.isArray(saved.articles) ||
+        !Array.isArray(saved.expenses) || !validLimits(saved.legacyBudgets)) throw new Error("Invalid daily data");
+    const ids = new Set();
+    saved.articles.forEach((article) => {
+      // Imported names are preserved exactly, even when longer than the new input limit.
+      if (!article || typeof article.id !== "string" || !article.id || ids.has(article.id) ||
+          typeof article.name !== "string" || !article.name.trim() ||
+          article.period !== "month" || typeof article.archived !== "boolean" ||
+          (article.limit !== null && (!Number.isSafeInteger(article.limit) || article.limit <= 0))) {
+        throw new Error("Invalid article");
+      }
+      ids.add(article.id);
     });
-    if (JSON.stringify(updated) !== JSON.stringify(saved)) {
-      localStorage.setItem(BUDGET_KEY, JSON.stringify(updated));
+    if (!saved.expenses.every((item) => validExpense(item) && ids.has(item.category))) {
+      throw new Error("Invalid expense reference");
     }
-    return updated;
+    return saved;
   }
 
-  function loadBudgets() {
-    try {
-      budgets = readBudgets();
-      budgetsReadable = true;
-      budgetError("");
-    } catch {
-      budgetsReadable = false;
-      budgetError("Не удалось прочитать или обновить лимиты. Сохранённые данные не изменены. Попробуйте обновить страницу.");
-    }
+  function migrateDaily() {
+    const expenseRaw = localStorage.getItem(STORAGE_KEY);
+    const budgetRaw = localStorage.getItem(BUDGET_KEY);
+    const oldExpenses = expenseRaw === null ? [] : JSON.parse(expenseRaw);
+    const oldBudgets = budgetRaw === null ? {} : JSON.parse(budgetRaw);
+    if (!Array.isArray(oldExpenses) || !oldExpenses.every((item) => validExpense(item) && item.category.trim()) ||
+        !validLimits(oldBudgets)) throw new Error("Invalid legacy data");
+    const names = new Set(oldExpenses.map((item) => item.category));
+    Object.values(oldBudgets).forEach((limits) => Object.keys(limits).forEach((name) => names.add(name)));
+    const month = localDate().slice(0, 7);
+    const articles = [...names].map((name, index) => ({
+      id: `imported-${index + 1}`, name, period: "month", archived: false,
+      limit: Object.hasOwn(oldBudgets[month] || {}, name) ? oldBudgets[month][name] : null
+    }));
+    const ids = new Map(articles.map((article) => [article.name, article.id]));
+    const next = validateDaily({
+      version: 1, articles,
+      expenses: oldExpenses.map((item) => ({ ...item, category: ids.get(item.category) })),
+      legacyBudgets: oldBudgets
+    });
+    // One atomic write completes migration. Both original keys stay untouched as backup.
+    localStorage.setItem(DAILY_KEY, JSON.stringify(next));
+    return next;
   }
 
-  function changeBudget(category, index, remove) {
-    const now = new Date();
-    if (localDate(now).slice(0, 7) !== budgetMonth) {
-      render();
-      budgetError("Начался новый месяц. Задайте лимит заново.");
-      return;
-    }
-    const input = byId(`budget-${index}`);
-    const status = byId(`budget-status-${index}`);
-    status.textContent = "";
-    const amount = remove ? null : parseAmount(input.value);
-    fieldError(`budget-${index}`, !remove && amount === null ? "Введите положительную целую сумму до 9 007 199 254 740 991 ₸." : "");
-    if (!remove && amount === null) { input.focus(); return; }
-    // Read the latest limits before writing so another category's changes are preserved.
-    let next;
-    try {
-      next = readBudgets();
-    } catch {
-      loadBudgets();
-      render();
-      return;
-    }
-    const limits = { ...(next[budgetMonth] || {}) };
-    if (remove) delete limits[category];
-    else limits[category] = amount;
-    if (Object.keys(limits).length) next[budgetMonth] = limits;
-    else delete next[budgetMonth];
-    try {
-      localStorage.setItem(BUDGET_KEY, JSON.stringify(next));
-    } catch {
-      budgetError("Не удалось сохранить лимит. Данные не изменены, введённая сумма оставлена в поле. Попробуйте снова.");
-      return;
-    }
-    budgets = next;
+  function applyDaily(saved, raw) {
+    daily = saved;
+    expenses = saved.expenses;
+    categories = saved.articles.map((article) => article.id);
+    savedSnapshot = raw;
+    storageReadable = true;
     budgetsReadable = true;
+    storageError("");
     budgetError("");
-    input.value = remove ? "" : String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
-    dirtyBudgetInputs.delete(index);
-    render();
-    status.textContent = remove ? "Лимит убран" : "Лимит сохранён";
   }
 
-  function renderBudget(now, resetInputs = false) {
-    const month = localDate(now).slice(0, 7);
-    if (month !== budgetMonth) {
-      dirtyBudgetInputs.clear();
-      budgetMonth = month;
-      loadBudgets();
-      const fragment = document.createDocumentFragment();
-      categories.forEach((category, index) => {
-        const row = document.createElement("form");
-        row.className = "budget-category";
-        row.noValidate = true;
-        const heading = document.createElement("h3");
-        heading.id = `budget-heading-${index}`;
-        heading.textContent = category;
-        row.setAttribute("aria-labelledby", heading.id);
-        const saved = document.createElement("p");
-        saved.id = `budget-limit-${index}`;
-        saved.className = "budget-limit";
-        const spent = document.createElement("p");
-        spent.id = `budget-spent-${index}`;
-        spent.className = "budget-amount";
-        const remaining = document.createElement("p");
-        remaining.id = `budget-remaining-${index}`;
-        remaining.className = "budget-amount";
-        const warning = document.createElement("p");
-        warning.id = `budget-warning-${index}`;
-        warning.className = "budget-warning";
-        warning.setAttribute("role", "status");
-        warning.hidden = true;
-        const controls = document.createElement("div");
-        controls.className = "budget-controls";
-        const field = document.createElement("div");
-        field.className = "field";
-        const label = document.createElement("label");
-        label.htmlFor = `budget-${index}`;
-        label.textContent = "Лимит, ₸";
-        const input = document.createElement("input");
-        input.id = `budget-${index}`;
-        input.type = "text";
-        input.inputMode = "numeric";
-        input.placeholder = "Например, 20 000";
-        input.setAttribute("aria-describedby", `budget-${index}-error`);
-        input.addEventListener("input", () => dirtyBudgetInputs.add(index));
-        const error = document.createElement("p");
-        error.id = `budget-${index}-error`;
-        error.className = "error";
-        error.setAttribute("role", "alert");
-        error.hidden = true;
-        const save = document.createElement("button");
-        save.type = "submit";
-        save.textContent = "Сохранить";
-        const remove = document.createElement("button");
-        remove.id = `budget-remove-${index}`;
-        remove.type = "button";
-        remove.textContent = "Убрать лимит";
-        remove.addEventListener("click", () => changeBudget(category, index, true));
-        const status = document.createElement("p");
-        status.id = `budget-status-${index}`;
-        status.className = "budget-status";
-        status.setAttribute("role", "status");
-        field.append(label, input, error);
-        controls.append(field, save, remove);
-        row.append(heading, saved, spent, remaining, warning, controls, status);
-        row.addEventListener("submit", (event) => { event.preventDefault(); changeBudget(category, index, false); });
-        fragment.append(row);
-      });
-      byId("budget-categories").replaceChildren(fragment);
-      resetInputs = true;
+  function saveDaily(next) {
+    validateDaily(next);
+    const raw = JSON.stringify(next);
+    localStorage.setItem(DAILY_KEY, raw);
+    applyDaily(next, raw);
+  }
+
+  function load(allowMigration = false) {
+    try {
+      const raw = localStorage.getItem(DAILY_KEY);
+      if (raw !== null && raw === savedSnapshot && storageReadable) return;
+      const saved = raw === null && allowMigration ? migrateDaily() : validateDaily(JSON.parse(raw));
+      selectedExpense = null;
+      applyDaily(saved, raw === null ? JSON.stringify(saved) : raw);
+    } catch {
+      storageReadable = false;
+      budgetsReadable = false;
+      storageError("Не удалось прочитать или перенести статьи и траты. Изменения приостановлены, исходные данные сохранены. Попробуйте обновить страницу.");
+      budgetError("Статьи и лимиты недоступны. Сохранённые данные не изменены.");
     }
+  }
+
+  function articleNameError(name) {
+    if (!name || name.length > 100) return "Введите название от 1 до 100 символов.";
+    if (daily.articles.some((article) => article.name.trim().toLocaleLowerCase("ru-RU") === name.toLocaleLowerCase("ru-RU"))) {
+      return "Такая статья уже есть. Выберите другое название.";
+    }
+    return "";
+  }
+
+  function closeArticleEditor() {
+    byId("article-editor").hidden = true;
+    byId("create-article").setAttribute("aria-expanded", "false");
+    byId("create-article").focus();
+  }
+
+  document.querySelectorAll("[data-create-article]").forEach((button) => {
+    button.addEventListener("click", () => {
+      showView("budget");
+      byId("article-editor").hidden = false;
+      byId("create-article").setAttribute("aria-expanded", "true");
+      byId("article-status").textContent = "";
+      byId("article-name").focus();
+    });
+  });
+  byId("cancel-article").addEventListener("click", closeArticleEditor);
+  byId("article-editor").addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (expenseWritePending) return;
+    const name = byId("article-name").value.trim();
+    const amount = parseAmount(byId("article-amount").value);
+    fieldError("article-name", articleNameError(name));
+    fieldError("article-amount", amount === null ? "Введите положительную целую сумму до 9 007 199 254 740 991 ₸." : "");
+    const invalid = byId("article-editor").querySelector('[aria-invalid="true"]');
+    if (invalid) { invalid.focus(); return; }
+    const enteredName = byId("article-name").value;
+    const enteredAmount = byId("article-amount").value;
+    byId("article-status").textContent = "";
+    void changeExpenses(() => {
+      load();
+      if (!storageReadable) { render(); return; }
+      const error = articleNameError(name);
+      fieldError("article-name", error);
+      if (error) { byId("article-name").focus(); render(); return; }
+      let id;
+      do { id = savingsId(); } while (daily.articles.some((article) => article.id === id));
+      try {
+        saveDaily({ ...daily, articles: [...daily.articles, { id, name, limit: amount, period: "month", archived: false }] });
+      } catch {
+        budgetError("Не удалось сохранить статью. Поля сохранены, попробуйте снова.");
+        render();
+        return;
+      }
+      if (byId("article-name").value === enteredName && byId("article-amount").value === enteredAmount) {
+        byId("article-editor").reset();
+        closeArticleEditor();
+      }
+      render();
+      byId("category").value = id;
+      byId("article-status").textContent = "Статья создана";
+    });
+  });
+
+  let renderedArticleChoices = "";
+  function renderArticleChoices() {
+    const active = storageReadable ? daily.articles.filter((article) => !article.archived) : [];
+    const signature = JSON.stringify(active.map(({ id, name }) => [id, name]));
+    const select = byId("category");
+    if (signature !== renderedArticleChoices) {
+      const previous = select.value;
+      const options = active.map((article) => {
+        const option = document.createElement("option");
+        option.value = article.id;
+        option.textContent = article.name;
+        return option;
+      });
+      select.replaceChildren(...options);
+      if (active.some((article) => article.id === previous)) select.value = previous;
+      else if (previous) select.value = "";
+      renderedArticleChoices = signature;
+    }
+    select.disabled = !active.length;
+    byId("category-hint").textContent = storageReadable
+      ? "Сначала создайте статью в бюджете." : "Статьи недоступны. Попробуйте обновить страницу.";
+    byId("category-hint").hidden = active.length > 0;
+    byId("expense-create-article").hidden = !storageReadable || active.length > 0;
+    byId("create-article").disabled = !storageReadable;
+    byId("save-article").disabled = !storageReadable;
+    byId("budget-empty").hidden = !storageReadable || categories.length > 0;
+  }
+
+  function renderBudget(now) {
+    const month = localDate(now).slice(0, 7);
+    budgets = { [month]: Object.fromEntries(daily.articles
+      .filter((article) => !article.archived && article.limit !== null)
+      .map((article) => [article.id, article.limit])) };
+    renderArticleChoices();
+    const fragment = document.createDocumentFragment();
+    categories.forEach((category, index) => {
+      const row = document.createElement("section");
+      row.className = "budget-category";
+      const heading = document.createElement("h3");
+      heading.id = `budget-heading-${index}`;
+      heading.textContent = categoryName(category);
+      row.setAttribute("aria-labelledby", heading.id);
+      row.append(heading);
+      [["limit", "budget-limit"], ["spent", "budget-amount"], ["remaining", "budget-amount"], ["warning", "budget-warning"]].forEach(([key, className]) => {
+        const text = document.createElement("p");
+        text.id = `budget-${key}-${index}`;
+        text.className = className;
+        row.append(text);
+      });
+      fragment.append(row);
+    });
+    byId("budget-categories").replaceChildren(fragment);
     byId("budget-month").textContent = now.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
     byId("month-label").textContent = byId("budget-month").textContent;
     const spentByCategory = new Map(categories.map((category) => [category, 0n]));
-    if (storageReadable) {
-      expenses.forEach((item) => {
-        if (item.date.startsWith(`${month}-`)) {
-          spentByCategory.set(item.category, spentByCategory.get(item.category) + BigInt(item.amount));
-        }
-      });
-    }
+    if (storageReadable) expenses.forEach((item) => {
+      if (item.date.startsWith(`${month}-`)) spentByCategory.set(item.category, spentByCategory.get(item.category) + BigInt(item.amount));
+    });
     byId("budget-expenses-error").textContent = storageReadable ? "" : "Не удалось прочитать траты. Потраченные суммы и остатки пока недоступны.";
     byId("budget-expenses-error").hidden = storageReadable;
-    const limits = Object.values(budgets[budgetMonth] || {});
+    const limits = Object.values(budgets[month]);
     const budgetTotal = limits.reduce((sum, amount) => sum + BigInt(amount), 0n);
     const spentTotal = [...spentByCategory.values()].reduce((sum, amount) => sum + amount, 0n);
     const remainingTotal = storageReadable && budgetsReadable && limits.length ? budgetTotal - spentTotal : null;
@@ -1699,8 +1753,8 @@
     totalWarning.textContent = remainingTotal !== null && remainingTotal < 0n ? `Перерасход бюджета: ${money(-remainingTotal)}` : "";
     totalWarning.hidden = !totalWarning.textContent;
     categories.forEach((category, index) => {
-      const amount = budgets[budgetMonth]?.[category];
-      byId(`budget-limit-${index}`).textContent = !budgetsReadable ? "Лимит: —" : amount === undefined ? "Лимит не задан" : `Лимит: ${money(amount)}`;
+      const amount = budgets[month][category];
+      byId(`budget-limit-${index}`).textContent = !budgetsReadable ? "Лимит: —" : amount === undefined ? "Лимит не задан" : `Лимит в месяц: ${money(amount)}`;
       const spent = spentByCategory.get(category);
       const remaining = storageReadable && budgetsReadable && amount !== undefined ? BigInt(amount) - spent : null;
       byId(`budget-spent-${index}`).textContent = `Потрачено: ${storageReadable ? money(spent) : "—"}`;
@@ -1708,12 +1762,6 @@
       const warning = byId(`budget-warning-${index}`);
       warning.textContent = remaining !== null && remaining < 0n ? `Перерасход: ${money(-remaining)}` : "";
       warning.hidden = !warning.textContent;
-      byId(`budget-remove-${index}`).disabled = !budgetsReadable || amount === undefined;
-      if (resetInputs && !dirtyBudgetInputs.has(index)) {
-        byId(`budget-${index}`).value = budgetsReadable && amount !== undefined ? String(amount).replace(/\B(?=(\d{3})+(?!\d))/g, " ") : "";
-        fieldError(`budget-${index}`, "");
-        byId(`budget-status-${index}`).textContent = "";
-      }
     });
     renderOverviewBudget(month, spentByCategory, budgetTotal, spentTotal, remainingTotal, limits.length);
     renderOverviewAnalytics(now, month, spentByCategory, spentTotal);
@@ -1731,7 +1779,7 @@
       row.className = "recent-expense";
       const category = document.createElement("strong");
       category.className = "recent-category";
-      category.textContent = item.category;
+      category.textContent = categoryName(item.category);
       const amount = document.createElement("strong");
       amount.className = "recent-amount";
       amount.textContent = money(item.amount);
@@ -1800,7 +1848,7 @@
     categories.forEach((category) => {
       const row = document.createElement("div");
       const name = document.createElement("dt");
-      name.textContent = category;
+      name.textContent = categoryName(category);
       const value = document.createElement("dd");
       const amount = spentByCategory.get(category);
       const sum = document.createElement("span");
@@ -1830,7 +1878,7 @@
     byId("overview-limit-count").textContent = `Лимиты: ${budgetsReadable ? limitCount : "—"} из ${categories.length}`;
     byId("overview-budget-note").textContent = !budgetsReadable ? "Лимиты недоступны. Бюджет и остатки пока неизвестны." : !limitCount
       ? "Задайте лимиты в разделе «Бюджет», чтобы видеть остатки."
-      : "Остаток рассчитан по заданным лимитам. Расходы включают все категории, в том числе без лимита.";
+      : "Остаток рассчитан по заданным лимитам. Расходы включают все статьи, в том числе без лимита.";
     const warning = byId("overview-budget-warning");
     warning.textContent = remainingTotal !== null && remainingTotal < 0n ? `Перерасход бюджета: ${money(-remainingTotal)}` : "";
     warning.hidden = !warning.textContent;
@@ -1840,7 +1888,7 @@
       row.className = "overview-budget-category";
       const heading = document.createElement("h3");
       heading.id = `overview-category-${index}`;
-      heading.textContent = category;
+      heading.textContent = categoryName(category);
       row.setAttribute("aria-labelledby", heading.id);
       const limit = budgetsReadable ? budgets[month]?.[category] : undefined;
       const spent = spentByCategory.get(category);
@@ -1881,40 +1929,14 @@
     byId("overview-budget-categories").replaceChildren(fragment);
   }
 
-  function load() {
-    selectedExpense = null;
-    try {
-      let raw = localStorage.getItem(STORAGE_KEY);
-      const saved = raw === null ? [] : JSON.parse(raw);
-      if (!Array.isArray(saved) || !saved.every((item) => item && Number.isSafeInteger(item.amount) && item.amount > 0 && savedCategories.includes(item.category) && validDate(item.date) && typeof item.comment === "string")) {
-        throw new Error("Invalid saved data");
-      }
-      const updated = saved.filter((item) => !removedCategories.includes(item.category))
-        .map((item) => item.category === "Еда" ? { ...item, category: "Продукты" } : item);
-      if (saved.some((item) => item.category === "Еда" || removedCategories.includes(item.category))) {
-        const serialized = JSON.stringify(updated);
-        localStorage.setItem(STORAGE_KEY, serialized);
-        raw = serialized;
-      }
-      expenses = updated;
-      savedSnapshot = raw;
-      storageReadable = true;
-      storageError("");
-    } catch {
-      storageReadable = false;
-      storageError("Не удалось прочитать или обновить сохранённые траты. Добавление и удаление приостановлены, чтобы не потерять данные. Попробуйте обновить страницу.");
-    }
-  }
-
-  function render(resetBudgetInputs = false) {
+  function render() {
     const now = new Date();
     void synchronizeObligationSchedule();
     renderObligations();
     renderIncomes();
     renderSavings(now);
     if (!dateEdited) byId("date").value = localDate(now);
-    // Focus listeners pass an event; only an explicit true resets clean inputs.
-    renderBudget(now, resetBudgetInputs === true);
+    renderBudget(now);
     updateQuickPeriod(now);
     const invalidPeriod = (start.value && !validDate(start.value)) || (end.value && !validDate(end.value)) || (start.value && end.value && start.value > end.value);
     byId("period-error").textContent = invalidPeriod ? "Проверьте период: дата «С» должна быть не позже даты «По»." : "";
@@ -1931,7 +1953,7 @@
     categories.forEach((category) => {
       const row = document.createElement("div");
       const name = document.createElement("dt");
-      name.textContent = category;
+      name.textContent = categoryName(category);
       const amount = document.createElement("dd");
       amount.textContent = invalidPeriod || !storageReadable ? "—" : money(categoryTotals.get(category));
       row.append(name, amount);
@@ -1955,7 +1977,7 @@
       radio.name = "selected-expense";
       radio.checked = selectedExpense === item;
       radio.disabled = !storageReadable;
-      radio.setAttribute("aria-label", `Выбрать трату: ${item.category}, ${money(item.amount)}, ${displayDate(item.date)}, запись ${expenses.indexOf(item) + 1}`);
+      radio.setAttribute("aria-label", `Выбрать трату: ${categoryName(item.category)}, ${money(item.amount)}, ${displayDate(item.date)}, запись ${expenses.indexOf(item) + 1}`);
       radio.addEventListener("change", () => {
         selectedExpense = item;
         renderedSelection = item;
@@ -1967,7 +1989,7 @@
       details.className = "expense-details";
       const category = document.createElement("strong");
       category.className = "expense-category";
-      category.textContent = item.category;
+      category.textContent = categoryName(item.category);
       const amount = document.createElement("strong");
       amount.className = "expense-amount";
       amount.textContent = money(item.amount);
@@ -1996,12 +2018,12 @@
     expenseWritePending = true;
     try {
       if (typeof navigator !== "undefined" && navigator.locks?.request) {
-        await navigator.locks.request(STORAGE_KEY, action);
+        await navigator.locks.request(DAILY_KEY, action);
       } else {
         action();
       }
     } catch {
-      storageError("Не удалось обновить траты. Поля сохранены, попробуйте снова.");
+      storageError("Не удалось обновить статьи и траты. Поля сохранены, попробуйте снова.");
     } finally {
       expenseWritePending = false;
     }
@@ -2016,7 +2038,7 @@
     const category = byId("category").value;
     const date = byId("date").value;
     fieldError("amount", amount === null ? "Введите положительную целую сумму в тенге, например 5 000." : "");
-    fieldError("category", categories.includes(category) ? "" : "Выберите категорию из списка.");
+    fieldError("category", daily.articles.some((article) => article.id === category && !article.archived) ? "" : "Выберите активную статью. Если статей нет, создайте её в бюджете.");
     fieldError("date", validDate(date) ? "" : "Укажите корректную дату.");
     const invalid = form.querySelector('[aria-invalid="true"]');
     if (invalid) { invalid.focus(); return; }
@@ -2026,17 +2048,20 @@
       // Read inside the lock: a storage event from another tab may still be queued.
       load();
       if (!storageReadable) { render(); return; }
+      if (!daily.articles.some((article) => article.id === category && !article.archived)) {
+        fieldError("category", "Статья недоступна. Выберите активную статью.");
+        render();
+        return;
+      }
       const next = [{ amount, category, date, comment: enteredComment.trim() }, ...expenses];
-      const serialized = JSON.stringify(next);
       try {
-        localStorage.setItem(STORAGE_KEY, serialized);
+        saveDaily({ ...daily, expenses: next });
       } catch {
         storageError("Не удалось сохранить трату. Проверьте доступ к хранилищу браузера и попробуйте снова. Поля сохранены в форме.");
         render();
         return;
       }
       expenses = next;
-      savedSnapshot = serialized;
       selectedExpense = null;
       byId("delete-status").textContent = "";
       storageError("");
@@ -2050,7 +2075,7 @@
 
   function deletionDataIsCurrent() {
     try {
-      if (localStorage.getItem(STORAGE_KEY) === savedSnapshot) return true;
+      if (localStorage.getItem(DAILY_KEY) === savedSnapshot) return true;
       load();
       render();
       byId("delete-status").textContent = "Список изменился в другой вкладке. Выберите трату заново.";
@@ -2066,19 +2091,17 @@
     byId("delete-status").textContent = "";
     if (!storageReadable || !target || !expenses.includes(target) || !deletionDataIsCurrent()) return;
     const comment = target.comment ? `\n${target.comment}` : "";
-    if (!window.confirm(`Удалить трату?\n${money(target.amount)} · ${target.category}\n${displayDate(target.date)}${comment}\n\nВосстановить запись после удаления нельзя.`)) return;
+    if (!window.confirm(`Удалить трату?\n${money(target.amount)} · ${categoryName(target.category)}\n${displayDate(target.date)}${comment}\n\nВосстановить запись после удаления нельзя.`)) return;
     changeExpenses(() => {
       if (!deletionDataIsCurrent() || selectedExpense !== target) return;
       const next = expenses.filter((item) => item !== target);
-      const serialized = JSON.stringify(next);
       try {
-        localStorage.setItem(STORAGE_KEY, serialized);
+        saveDaily({ ...daily, expenses: next });
       } catch {
         storageError("Не удалось сохранить удаление. Трата осталась в списке. Попробуйте снова.");
         return;
       }
       expenses = next;
-      savedSnapshot = serialized;
       selectedExpense = null;
       storageError("");
       byId("save-status").textContent = "";
@@ -2129,19 +2152,17 @@
     renderIncomes();
   });
   window.addEventListener("storage", (event) => {
-    if (event.key !== BUDGET_KEY && event.key !== STORAGE_KEY && event.key !== SAVINGS_KEY && event.key !== null) return;
+    if (event.key !== DAILY_KEY && event.key !== SAVINGS_KEY && event.key !== null) return;
     if (event.key === SAVINGS_KEY || event.key === null) {
       loadSavings();
       byId("goal-status").textContent = "";
     }
-    if (event.key === BUDGET_KEY || event.key === null) {
-      loadBudgets();
-    }
-    if (event.key === STORAGE_KEY || event.key === null) {
+    if (event.key === DAILY_KEY || event.key === null) {
       load();
       byId("delete-status").textContent = "";
+      byId("article-status").textContent = "";
     }
-    render(event.key === BUDGET_KEY || event.key === null);
+    render();
   });
   window.addEventListener("storage", (event) => {
     if (event.key !== OBLIGATION_KEY && event.key !== null) return;
@@ -2150,16 +2171,15 @@
     void synchronizeObligationSchedule();
     renderObligations();
   });
-  window.addEventListener("focus", () => { loadObligations(); loadIncomes(); loadSavings(); render(); });
+  window.addEventListener("focus", () => { load(); loadObligations(); loadIncomes(); loadSavings(); render(); });
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") { loadObligations(); loadIncomes(); loadSavings(); render(); }
+    if (document.visibilityState === "visible") { load(); loadObligations(); loadIncomes(); loadSavings(); render(); }
   });
   setInterval(render, 60000);
   byId("date").value = localDate();
   byId("income-date").value = localDate();
   loadObligations();
   loadIncomes();
-  load();
   loadSavings();
-  render();
+  void changeExpenses(() => { load(true); render(); });
 })();

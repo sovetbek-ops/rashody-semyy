@@ -38,8 +38,8 @@
       <section id="view-overview" aria-label="Обзор">
         <div class="overview-month"><p class="eyebrow">ТЕКУЩИЙ МЕСЯЦ</p><p id="month-label"></p></div>
         <dl class="overview-metrics" aria-label="Показатели текущего месяца">
-          <div class="metric metric-spent"><dt>Потрачено</dt><dd id="month-total" aria-live="polite">0 ₸</dd><dd class="metric-note">Все категории месяца</dd></div>
-          <div class="metric"><dt>Бюджет по лимитам</dt><dd id="overview-budget-total">Не задан</dd><dd id="overview-limit-count" class="metric-note">Лимиты: 0 из 5</dd></div>
+          <div class="metric metric-spent"><dt>Потрачено</dt><dd id="month-total" aria-live="polite">0 ₸</dd><dd class="metric-note">Все статьи месяца</dd></div>
+          <div class="metric"><dt>Бюджет по лимитам</dt><dd id="overview-budget-total">Не задан</dd><dd id="overview-limit-count" class="metric-note">Лимиты: 0 из 0</dd></div>
           <div class="metric"><dt>Осталось</dt><dd id="overview-remaining">—</dd><dd class="metric-note">От заданного бюджета</dd></div>
           <div class="metric"><dt>Записей за месяц</dt><dd id="overview-expense-count">0</dd><dd class="metric-note">По датам трат</dd></div>
         </dl>
@@ -72,7 +72,7 @@
             </details>
           </section>
           <section class="card" aria-labelledby="month-categories-heading">
-            <h2 id="month-categories-heading">Категории месяца</h2>
+            <h2 id="month-categories-heading">Статьи месяца</h2>
             <p class="budget-note">Суммы и доли в расходах текущего месяца.</p>
             <dl id="month-category-totals" class="month-category-totals"></dl>
           </section>
@@ -102,7 +102,7 @@
           <form id="expense-form" novalidate>
             <div class="form-grid">
               <div class="field"><label for="amount">Сумма, ₸</label><input id="amount" name="amount" type="text" inputmode="numeric" placeholder="Например, 5 000" required aria-describedby="amount-error"><p id="amount-error" class="error" hidden></p></div>
-              <div class="field"><label for="category">Категория</label><select id="category" name="category" required aria-describedby="category-error"><option value="Продукты">Продукты</option><option value="Транспорт">Транспорт</option><option value="Кредит">Кредит</option><option value="Ипотека">Ипотека</option><option value="Расходы на секцию ребёнка">Расходы на секцию ребёнка</option></select><p id="category-error" class="error" hidden></p></div>
+              <div class="field"><label for="category">Статья</label><select id="category" name="category" required aria-describedby="category-error category-hint"></select><p id="category-error" class="error" hidden></p><p id="category-hint" class="budget-note" hidden>Сначала создайте статью в бюджете.</p><button id="expense-create-article" type="button" data-create-article hidden>Создать статью</button></div>
               <div class="field"><label for="date">Дата</label><input id="date" name="date" type="date" required aria-describedby="date-error"><p id="date-error" class="error" hidden></p></div>
               <div class="field"><label for="comment">Комментарий <span>необязательно</span></label><input id="comment" name="comment" type="text" placeholder="На что потратили"></div>
             </div>
@@ -121,7 +121,7 @@
           <p id="delete-hint">Выберите одну трату в списке, чтобы удалить её.</p>
           <p id="delete-status" role="status"></p>
           <section class="category-summary" aria-labelledby="category-heading" aria-describedby="category-period">
-            <h3 id="category-heading">По категориям</h3>
+            <h3 id="category-heading">По статьям</h3>
             <p id="category-period">За выбранный период</p>
             <dl id="category-totals"></dl>
       </section>
@@ -145,17 +145,28 @@
         <section class="card" aria-labelledby="budget-heading">
           <h2 id="budget-heading">Бюджет по лимитам</h2>
           <p id="budget-month" class="budget-note"></p>
-          <p class="budget-note">Задайте лимиты на этот месяц. В новом месяце их нужно задать заново.</p>
+          <p class="budget-note">Создавайте свои статьи. Месячные лимиты повторяются, остатки не переносятся.</p>
+          <button id="create-article" type="button" class="primary" data-create-article aria-controls="article-editor" aria-expanded="false">Создать статью</button>
+          <form id="article-editor" novalidate hidden aria-labelledby="article-form-heading">
+            <h3 id="article-form-heading">Новая статья</h3>
+            <div class="form-grid">
+              <div class="field"><label for="article-name">Название</label><input id="article-name" type="text" required aria-describedby="article-name-error" placeholder="Например, Развлечения"><p id="article-name-error" class="error" hidden></p></div>
+              <div class="field"><label for="article-amount">Лимит в месяц, ₸</label><input id="article-amount" type="text" inputmode="numeric" required aria-describedby="article-amount-error" placeholder="Например, 20 000"><p id="article-amount-error" class="error" hidden></p></div>
+            </div>
+            <div class="form-footer"><button id="save-article" type="submit" class="primary">Сохранить</button><button id="cancel-article" type="button">Отмена</button></div>
+          </form>
+          <p id="article-status" class="budget-status" role="status"></p>
           <div class="budget-summary" aria-label="Итоги бюджета месяца">
             <dl class="budget-totals">
               <div><dt>Общий бюджет</dt><dd id="budget-total">Не задан</dd></div>
               <div><dt>Потрачено за месяц</dt><dd id="budget-spent">0 ₸</dd></div>
               <div><dt>Осталось</dt><dd id="budget-remaining">—</dd></div>
             </dl>
-            <p id="budget-limit-count" class="budget-note">Лимиты заданы: 0 из 5</p>
-            <p class="budget-note">В расходах учтены все категории, включая категории без лимита.</p>
+            <p id="budget-limit-count" class="budget-note">Лимиты заданы: 0 из 0</p>
+            <p class="budget-note">В расходах учтены все статьи, включая статьи без лимита.</p>
             <p id="budget-warning" class="budget-warning" role="status" hidden></p>
           </div>
+          <p id="budget-empty" class="budget-note">Пока нет статей. Создайте первую статью бюджета.</p>
           <div id="budget-categories"></div>
         </section>
       </section>
