@@ -145,15 +145,17 @@
         <section class="card" aria-labelledby="budget-heading">
           <h2 id="budget-heading">Бюджет по лимитам</h2>
           <p id="budget-month" class="budget-note"></p>
-          <p class="budget-note">Создавайте свои статьи. Месячные лимиты повторяются, остатки не переносятся.</p>
+          <p class="budget-note">Лимиты повторяются каждый месяц или неделю с понедельника. Остатки не переносятся.</p>
+          <p class="budget-note">План делится поровну в целых тенге; остаток деления добавляется первым дням периода. Траты не меняют план следующих дней. Общий бюджет — план всего месяца, включая части недель.</p>
           <button id="create-article" type="button" class="primary" data-create-article aria-controls="article-editor" aria-expanded="false">Создать статью</button>
           <form id="article-editor" novalidate hidden aria-labelledby="article-form-heading">
             <h3 id="article-form-heading">Новая статья</h3>
-            <p id="article-edit-note" class="budget-note" hidden>Изменение лимита пересчитает весь текущий месяц. Суммы и даты трат сохранятся. История прежних лимитов не ведётся.</p>
+            <p id="article-edit-note" class="budget-note" hidden>Изменение суммы или периода пересчитает весь текущий период и план месяца. Прежние траты будут учтены в новых границах. Суммы и даты трат сохранятся. История прежних лимитов не ведётся.</p>
             <p id="article-edit-state" class="error" role="alert" hidden></p>
             <div class="form-grid">
               <div class="field"><label for="article-name">Название</label><input id="article-name" type="text" required aria-describedby="article-name-error" placeholder="Например, Развлечения"><p id="article-name-error" class="error" hidden></p></div>
-              <div class="field"><label for="article-amount">Лимит в месяц, ₸</label><input id="article-amount" type="text" inputmode="numeric" required aria-describedby="article-amount-error" placeholder="Например, 20 000"><p id="article-amount-error" class="error" hidden></p></div>
+              <div class="field"><label for="article-amount">Лимит, ₸</label><input id="article-amount" type="text" inputmode="numeric" required aria-describedby="article-amount-error" placeholder="Например, 20 000"><p id="article-amount-error" class="error" hidden></p></div>
+              <div class="field"><label for="article-period">Период</label><select id="article-period" required aria-describedby="article-period-error"><option value="month">Месяц</option><option value="week">Неделя</option></select><p id="article-period-error" class="error" hidden></p></div>
             </div>
             <div class="form-footer"><button id="save-article" type="submit" class="primary">Сохранить</button><button id="cancel-article" type="button">Отмена</button></div>
           </form>

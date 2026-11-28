@@ -47,7 +47,6 @@
   let selectedExpense = null;
   let savedSnapshot = null;
   let activePeriod = "all";
-  let budgets = {};
   let budgetsReadable = false;
   let expenseWritePending = false;
   let editArticleId = null;
@@ -1555,7 +1554,7 @@
       // Imported names are preserved exactly, even when longer than the new input limit.
       if (!article || typeof article.id !== "string" || !article.id || ids.has(article.id) ||
           typeof article.name !== "string" || !article.name.trim() ||
-          article.period !== "month" || typeof article.archived !== "boolean" ||
+          !["month", "week"].includes(article.period) || typeof article.archived !== "boolean" ||
           (article.limit !== null && (!Number.isSafeInteger(article.limit) || article.limit <= 0))) {
         throw new Error("Invalid article");
       }
@@ -1642,6 +1641,7 @@
     byId("article-editor").reset();
     fieldError("article-name", "");
     fieldError("article-amount", "");
+    fieldError("article-period", "");
     byId("create-article").setAttribute("aria-expanded", "false");
     (byId(`article-edit-${id}`) || byId("create-article")).focus();
   }
@@ -1669,8 +1669,10 @@
     editArticleConflict = false;
     byId("article-name").value = article.name;
     byId("article-amount").value = article.limit === null ? "" : String(article.limit).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    byId("article-period").value = article.period;
     fieldError("article-name", "");
     fieldError("article-amount", "");
+    fieldError("article-period", "");
     byId("article-form-heading").textContent = "Изменить статью";
     byId("article-edit-note").hidden = false;
     byId("article-editor").hidden = false;
@@ -1786,12 +1788,14 @@
     if (expenseWritePending) return;
     const name = byId("article-name").value.trim();
     const amount = parseAmount(byId("article-amount").value);
+    const period = byId("article-period").value;
     renderArticleEditorState();
     if (!storageReadable || editArticleConflict) return;
     const editingId = editArticleId;
     const editingSnapshot = editArticleSnapshot;
     fieldError("article-name", articleNameError(name, editingId));
     fieldError("article-amount", amount === null ? "Введите положительную целую сумму до 9 007 199 254 740 991 ₸." : "");
+    fieldError("article-period", ["month", "week"].includes(period) ? "" : "Выберите месяц или неделю.");
     const invalid = byId("article-editor").querySelector('[aria-invalid="true"]');
     if (invalid) { invalid.focus(); return; }
     const enteredName = byId("article-name").value;
@@ -1807,8 +1811,8 @@
       if (error) { byId("article-name").focus(); render(); return; }
       let id = editingId;
       if (id === null) do { id = savingsId(); } while (daily.articles.some((article) => article.id === id));
-      const articles = editingId === null ? [...daily.articles, { id, name, limit: amount, period: "month", archived: false }]
-        : daily.articles.map((article) => article.id === id ? { ...article, name, limit: amount } : article);
+      const articles = editingId === null ? [...daily.articles, { id, name, limit: amount, period, archived: false }]
+        : daily.articles.map((article) => article.id === id ? { ...article, name, limit: amount, period } : article);
       try {
         saveDaily({ ...daily, articles });
       } catch {
@@ -1816,7 +1820,7 @@
         render();
         return;
       }
-      if (byId("article-name").value === enteredName && byId("article-amount").value === enteredAmount) {
+      if (byId("article-name").value === enteredName && byId("article-amount").value === enteredAmount && byId("article-period").value === period) {
         closeArticleEditor();
       } else if (editingId !== null) {
         editArticleSnapshot = JSON.stringify(daily.articles.find((article) => article.id === editingId));
@@ -1858,11 +1862,61 @@
   }
 
   let renderedArticleCards = "";
+
+  function budgetCalendar(now) {
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1, 12);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 12);
+    const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12);
+    weekStart.setDate(weekStart.getDate() - (weekStart.getDay() + 6) % 7);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    return { monthStart, monthEnd, weekStart, weekEnd };
+  }
+
+  function articleDayPlan(article, date) {
+    if (article.limit === null || article.archived) return null;
+    const days = article.period === "week" ? 7 : new Date(date.getFullYear(), date.getMonth() + 1, 0, 12).getDate();
+    const index = article.period === "week" ? (date.getDay() + 6) % 7 : date.getDate() - 1;
+    const limit = BigInt(article.limit);
+    return limit / BigInt(days) + (BigInt(index) < limit % BigInt(days) ? 1n : 0n);
+  }
+
+  function articlePlanBetween(article, first, last) {
+    if (article.limit === null || article.archived) return null;
+    let sum = 0n;
+    // Advance calendar dates, never divide elapsed milliseconds by a day length.
+    for (const day = new Date(first); day <= last; day.setDate(day.getDate() + 1)) {
+      sum += articleDayPlan(article, day);
+    }
+    return sum;
+  }
+
+  function articleBudget(article, now, calendar) {
+    const weekly = article.period === "week";
+    const start = localDate(weekly ? calendar.weekStart : calendar.monthStart);
+    const end = localDate(weekly ? calendar.weekEnd : calendar.monthEnd);
+    const weekStart = weekly || calendar.weekStart >= calendar.monthStart ? calendar.weekStart : calendar.monthStart;
+    const weekEnd = weekly || calendar.weekEnd <= calendar.monthEnd ? calendar.weekEnd : calendar.monthEnd;
+    const limit = article.limit === null || article.archived ? null : BigInt(article.limit);
+    const spent = storageReadable ? total(expenses.filter((item) => item.category === article.id && item.date >= start && item.date <= end)) : null;
+    return {
+      start, end, weekStart: localDate(weekStart), weekEnd: localDate(weekEnd),
+      label: `${weekly ? "Неделя" : "Месяц"} · ${displayDate(start)}–${displayDate(end)}`,
+      limit, spent, remaining: limit !== null && spent !== null ? limit - spent : null,
+      dayPlan: articleDayPlan(article, now),
+      weekPlan: articlePlanBetween(article, weekStart, weekEnd),
+      monthPlan: articlePlanBetween(article, calendar.monthStart, calendar.monthEnd)
+    };
+  }
+
+  function budgetMoney(value) {
+    return value === null ? "—" : savingsMoney(value);
+  }
+
   function renderBudget(now) {
     const month = localDate(now).slice(0, 7);
-    budgets = { [month]: Object.fromEntries(daily.articles
-      .filter((article) => !article.archived && article.limit !== null)
-      .map((article) => [article.id, article.limit])) };
+    const calendar = budgetCalendar(now);
+    const articleTotals = new Map(daily.articles.map((article) => [article.id, articleBudget(article, now, calendar)]));
     renderArticleChoices();
     const cardSignature = JSON.stringify(daily.articles);
     if (renderedArticleCards !== cardSignature) {
@@ -1877,7 +1931,7 @@
         heading.textContent = categoryName(category);
         row.setAttribute("aria-labelledby", heading.id);
         row.append(heading);
-        [["limit", "budget-limit"], ["spent", "budget-amount"], ["remaining", "budget-amount"], ["warning", "budget-warning"]].forEach(([key, className]) => {
+        [["period", "budget-note"], ["limit", "budget-limit"], ["spent", "budget-amount"], ["remaining", "budget-amount"], ["day-plan", "budget-amount"], ["week-plan", "budget-amount"], ["warning", "budget-warning"]].forEach(([key, className]) => {
           const text = document.createElement("p");
           text.id = `budget-${key}-${index}`;
           text.className = className;
@@ -1914,8 +1968,8 @@
     });
     byId("budget-expenses-error").textContent = storageReadable ? "" : "Не удалось прочитать траты. Потраченные суммы и остатки пока недоступны.";
     byId("budget-expenses-error").hidden = storageReadable;
-    const limits = Object.values(budgets[month]);
-    const budgetTotal = limits.reduce((sum, amount) => sum + BigInt(amount), 0n);
+    const limits = [...articleTotals.values()].filter((stats) => stats.monthPlan !== null);
+    const budgetTotal = limits.reduce((sum, stats) => sum + stats.monthPlan, 0n);
     const spentTotal = [...spentByCategory.values()].reduce((sum, amount) => sum + amount, 0n);
     const remainingTotal = storageReadable && budgetsReadable && limits.length ? budgetTotal - spentTotal : null;
     byId("budget-total").textContent = !budgetsReadable ? "—" : limits.length ? money(budgetTotal) : "Не задан";
@@ -1927,14 +1981,17 @@
     totalWarning.hidden = !totalWarning.textContent;
     categories.forEach((category, index) => {
       const article = daily.articles[index];
-      const amount = budgets[month][category];
+      const stats = articleTotals.get(category);
+      const periodName = article.period === "week" ? "неделю" : "месяц";
+      byId(`budget-period-${index}`).textContent = stats.label;
       byId(`budget-limit-${index}`).textContent = !budgetsReadable ? "Лимит: —"
-        : article.archived ? article.limit === null ? "В архиве · Лимит не задан" : `В архиве · Сохранённый лимит в месяц: ${money(article.limit)}`
-        : amount === undefined ? "Лимит не задан" : `Лимит в месяц: ${money(amount)}`;
-      const spent = spentByCategory.get(category);
-      const remaining = storageReadable && budgetsReadable && amount !== undefined ? BigInt(amount) - spent : null;
-      byId(`budget-spent-${index}`).textContent = `Потрачено: ${storageReadable ? money(spent) : "—"}`;
-      byId(`budget-remaining-${index}`).textContent = `Осталось: ${remaining === null ? "—" : remaining < 0n ? `−${money(-remaining)}` : money(remaining)}`;
+        : article.archived ? article.limit === null ? "В архиве · Лимит не задан" : `В архиве · Сохранённый лимит в ${periodName}: ${money(article.limit)}`
+        : stats.limit === null ? "Лимит не задан" : `Лимит в ${periodName}: ${money(stats.limit)}`;
+      const remaining = budgetsReadable ? stats.remaining : null;
+      byId(`budget-spent-${index}`).textContent = `Потрачено за период: ${budgetMoney(stats.spent)}`;
+      byId(`budget-remaining-${index}`).textContent = `Осталось: ${budgetMoney(remaining)}`;
+      byId(`budget-day-plan-${index}`).textContent = `План на сегодня (${displayDate(localDate(now))}): ${budgetMoney(budgetsReadable ? stats.dayPlan : null)}`;
+      byId(`budget-week-plan-${index}`).textContent = `План недели (${displayDate(stats.weekStart)}–${displayDate(stats.weekEnd)}): ${budgetMoney(budgetsReadable ? stats.weekPlan : null)}`;
       const warning = byId(`budget-warning-${index}`);
       warning.textContent = remaining !== null && remaining < 0n ? `Перерасход: ${money(-remaining)}` : "";
       warning.hidden = !warning.textContent;
@@ -1947,7 +2004,7 @@
         : hasExpenses ? article.archived ? "Есть траты. Статью с тратами удалить нельзя." : "Есть траты. Вместо удаления используйте «В архив»." : "";
       hint.hidden = !hint.textContent;
     });
-    renderOverviewBudget(month, spentByCategory, budgetTotal, spentTotal, remainingTotal, limits.length);
+    renderOverviewBudget(month, articleTotals, budgetTotal, spentTotal, remainingTotal, limits.length);
     renderOverviewAnalytics(now, month, spentByCategory, spentTotal);
     renderRecentExpenses(month);
   }
@@ -2052,7 +2109,7 @@
     byId("month-category-totals").replaceChildren(categoryRows);
   }
 
-  function renderOverviewBudget(month, spentByCategory, budgetTotal, spentTotal, remainingTotal, limitCount) {
+  function renderOverviewBudget(month, articleTotals, budgetTotal, spentTotal, remainingTotal, limitCount) {
     byId("month-total").textContent = storageReadable ? money(spentTotal) : "—";
     byId("expenses-month-total").textContent = byId("month-total").textContent;
     byId("overview-budget-total").textContent = !budgetsReadable ? "—" : limitCount ? money(budgetTotal) : "Не задан";
@@ -2075,14 +2132,18 @@
       heading.id = `overview-category-${index}`;
       heading.textContent = categoryName(category);
       row.setAttribute("aria-labelledby", heading.id);
-      const limit = budgetsReadable ? budgets[month]?.[category] : undefined;
-      const spent = spentByCategory.get(category);
-      const remaining = storageReadable && limit !== undefined ? BigInt(limit) - spent : null;
+      const stats = articleTotals.get(category);
+      const limit = budgetsReadable ? stats.limit : null;
+      const spent = stats.spent;
+      const remaining = budgetsReadable ? stats.remaining : null;
+      const period = document.createElement("p");
+      period.className = "budget-note";
+      period.textContent = stats.label;
       const details = document.createElement("dl");
       details.className = "overview-category-values";
       const values = [
-        ["Потрачено", storageReadable ? money(spent) : "—"],
-        ["Лимит", !budgetsReadable ? "—" : limit === undefined ? "Не задан" : money(limit)],
+        ["Потрачено", budgetMoney(spent)],
+        ["Лимит", !budgetsReadable ? "—" : limit === null ? "Не задан" : money(limit)],
         ["Осталось", remaining === null ? "—" : remaining < 0n ? `−${money(-remaining)}` : money(remaining)]
       ];
       values.forEach(([label, value]) => {
@@ -2097,18 +2158,18 @@
       const track = document.createElement("div");
       track.className = "budget-track";
       track.setAttribute("aria-hidden", "true");
-      track.hidden = !storageReadable || limit === undefined;
+      track.hidden = !storageReadable || limit === null;
       const fill = document.createElement("div");
       fill.className = remaining !== null && remaining < 0n ? "budget-fill is-over-budget" : "budget-fill";
       // Divide as integers first: only the bounded display percentage becomes a Number.
-      const ratio = limit !== undefined ? spent * 10000n / BigInt(limit) : 0n;
+      const ratio = limit !== null && spent !== null ? spent * 10000n / limit : 0n;
       fill.style.width = `${Number(ratio > 10000n ? 10000n : ratio) / 100}%`;
       track.append(fill);
       const categoryWarning = document.createElement("p");
       categoryWarning.className = "overview-category-warning";
       categoryWarning.textContent = remaining !== null && remaining < 0n ? `Перерасход: ${money(-remaining)}` : "";
       categoryWarning.hidden = !categoryWarning.textContent;
-      row.append(heading, details, track, categoryWarning);
+      row.append(heading, period, details, track, categoryWarning);
       fragment.append(row);
     });
     byId("overview-budget-categories").replaceChildren(fragment);
