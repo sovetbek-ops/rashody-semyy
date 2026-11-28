@@ -288,13 +288,14 @@
   let obligationConfirmation = null;
   let renderedObligations = "";
   let obligationPaymentAction = null;
+  let obligationScheduleReady = true;
 
   function renderFamilyMoney() {
     const month = localDate().slice(0, 7);
     const income = incomesReadable ? total(incomes.records.filter((item) => item.date.startsWith(month))) : null;
     const spent = storageReadable ? total(expenses.filter((item) => item.date.startsWith(month))) : null;
     const paid = obligationsReadable ? total(obligations.payments.filter((item) => item.status === "paid" && item.paidDate.startsWith(month))) : null;
-    const reserved = obligationsReadable ? total(obligations.payments.filter((item) => item.status === "unpaid")) : null;
+    const reserved = obligationsReadable && obligationScheduleReady ? total(obligations.payments.filter((item) => item.status === "unpaid")) : null;
     const available = [income, spent, paid, reserved].includes(null) ? null : income - spent - paid - reserved;
     const formatted = (amount) => amount === null ? "—" : amount < 0n ? `−${money(-amount)}` : money(amount);
     ["overview", "budget"].forEach((view) => {
@@ -378,11 +379,14 @@
           fieldError("obligation-paid-date", "Дата оплаты не должна быть в будущем.");
           return;
         }
-        const next = { ...obligations, payments: obligations.payments.map((payment) => payment.id === action.id ? {
+        const updated = appendMissingObligationPayments(obligations);
+        if (updated !== obligations) obligationScheduleReady = false;
+        const next = { ...updated, payments: updated.payments.map((payment) => payment.id === action.id ? {
           ...payment, status: action.cancel ? "unpaid" : "paid", paidDate: action.cancel ? null : date, changeId: savingsId()
         } : payment) };
         localStorage.setItem(OBLIGATION_KEY, JSON.stringify(next));
         obligations = next;
+        obligationScheduleReady = true;
         obligationPaymentAction = null;
         byId("obligation-status").textContent = action.cancel ? "Оплата отменена" : "Платёж оплачен";
         saved = true;
@@ -457,6 +461,56 @@
       dates.push(`${String(targetYear).padStart(4, "0")}-${String(targetMonth).padStart(2, "0")}-${String(Math.min(day, days[targetMonth - 1])).padStart(2, "0")}`);
     }
     return dates;
+  }
+
+  // Rebuild expected dates from the original rule; existing paid and unpaid
+  // occurrences both occupy their dates, including after moving the clock back.
+  function appendMissingObligationPayments(saved) {
+    const today = localDate();
+    const occurrences = new Set(saved.payments.map((payment) => `${payment.ruleId}:${payment.date}`));
+    const ids = new Set([...saved.rules, ...saved.payments].map((item) => item.id));
+    const added = [];
+    saved.rules.forEach((rule) => {
+      initialObligationDates(rule.date, rule.frequency, today).forEach((date) => {
+        const key = `${rule.id}:${date}`;
+        if (occurrences.has(key)) return;
+        let id;
+        do { id = savingsId(); } while (ids.has(id));
+        ids.add(id);
+        occurrences.add(key);
+        added.push({ id, ruleId: rule.id, amount: rule.amount, date, status: "unpaid", paidDate: null });
+      });
+    });
+    return added.length ? { ...saved, payments: [...saved.payments, ...added] } : saved;
+  }
+
+  async function synchronizeObligationSchedule() {
+    if (obligationWritePending || !obligationsReadable) return;
+    // Avoid rewriting storage or rebuilding controls when nothing is due.
+    if (appendMissingObligationPayments(obligations) === obligations) {
+      obligationScheduleReady = true;
+      return;
+    }
+    obligationWritePending = true;
+    obligationScheduleReady = false;
+    renderObligations();
+    try {
+      const synchronize = () => {
+        loadObligations();
+        if (!obligationsReadable) return;
+        const next = appendMissingObligationPayments(obligations);
+        if (next !== obligations) localStorage.setItem(OBLIGATION_KEY, JSON.stringify(next));
+        obligations = next;
+        obligationScheduleReady = true;
+      };
+      if (navigator.locks?.request) await navigator.locks.request(OBLIGATION_KEY, synchronize);
+      else synchronize();
+    } catch {
+      obligationStorageError("Не удалось создать платежи за новые месяцы. Резерв и доступная сумма пока неизвестны. Попробуйте обновить страницу.");
+    } finally {
+      obligationWritePending = false;
+      renderObligations();
+    }
   }
 
   function renderObligations() {
@@ -573,7 +627,9 @@
           obligationStorageError("Начался новый месяц. Проверьте число платежей и подтвердите создание заново.");
           return;
         }
-        const ids = new Set([...obligations.rules, ...obligations.payments].map((item) => item.id));
+        const updated = appendMissingObligationPayments(obligations);
+        if (updated !== obligations) obligationScheduleReady = false;
+        const ids = new Set([...updated.rules, ...updated.payments].map((item) => item.id));
         const uniqueId = () => {
           let id;
           do { id = savingsId(); } while (ids.has(id));
@@ -582,9 +638,10 @@
         };
         const rule = { id: uniqueId(), name: pending.name, amount: pending.amount, date: pending.date, frequency: pending.frequency };
         const payments = pending.dates.map((date) => ({ id: uniqueId(), ruleId: rule.id, amount: rule.amount, date, status: "unpaid", paidDate: null }));
-        const next = { version: 1, rules: [...obligations.rules, rule], payments: [...obligations.payments, ...payments] };
+        const next = { version: 1, rules: [...updated.rules, rule], payments: [...updated.payments, ...payments] };
         localStorage.setItem(OBLIGATION_KEY, JSON.stringify(next));
         obligations = next;
+        obligationScheduleReady = true;
         obligationConfirmation = null;
         byId("obligation-form").reset();
         obligationDateEdited = false;
@@ -1851,6 +1908,7 @@
 
   function render(resetBudgetInputs = false) {
     const now = new Date();
+    void synchronizeObligationSchedule();
     renderObligations();
     renderIncomes();
     renderSavings(now);
@@ -2089,6 +2147,7 @@
     if (event.key !== OBLIGATION_KEY && event.key !== null) return;
     loadObligations();
     byId("obligation-status").textContent = "";
+    void synchronizeObligationSchedule();
     renderObligations();
   });
   window.addEventListener("focus", () => { loadObligations(); loadIncomes(); loadSavings(); render(); });
