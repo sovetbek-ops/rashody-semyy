@@ -17,6 +17,7 @@
         <button type="button" class="nav-button" data-view="expenses" aria-controls="view-expenses"><span aria-hidden="true">≡</span>Траты<span class="nav-current" aria-hidden="true">Выбран</span></button>
         <button type="button" class="nav-button" data-view="budget" aria-controls="view-budget"><span aria-hidden="true">▤</span>Бюджет<span class="nav-current" aria-hidden="true">Выбран</span></button>
         <button type="button" class="nav-button" data-view="savings" aria-controls="view-savings"><span aria-hidden="true">◎</span>Накопления<span class="nav-current" aria-hidden="true">Выбран</span></button>
+        <button type="button" class="nav-button" data-view="incomes" aria-controls="view-incomes"><span aria-hidden="true">＋</span>Доходы<span class="nav-current" aria-hidden="true">Выбран</span></button>
       </nav>
       <p class="sidebar-note">Ваш семейный бюджет.<br>На вашем устройстве.</p>
     </aside>
@@ -30,6 +31,7 @@
         <p id="budget-error" class="error" role="alert" hidden></p>
         <p id="budget-expenses-error" class="error" role="alert" hidden></p>
         <p id="savings-error" class="error" role="alert" hidden></p>
+        <p id="income-storage-error" class="error" role="alert" hidden></p>
       </div>
       <section id="view-overview" aria-label="Обзор">
         <div class="overview-month"><p class="eyebrow">ТЕКУЩИЙ МЕСЯЦ</p><p id="month-label"></p></div>
@@ -207,6 +209,26 @@
         </section>
         <p id="goals-state" class="analytics-state">Пока нет целей</p>
         <div id="goal-list" class="goal-list"></div>
+      </section>
+      <section id="view-incomes" aria-label="Доходы" hidden>
+        <section class="card" aria-labelledby="income-form-heading">
+          <h2 id="income-form-heading">Добавить доход</h2>
+          <form id="income-form" novalidate>
+            <div class="form-grid">
+              <div class="field"><label for="income-name">Название</label><input id="income-name" type="text" required aria-describedby="income-name-error"><p id="income-name-error" class="error" hidden></p></div>
+              <div class="field"><label for="income-amount">Сумма, ₸</label><input id="income-amount" type="text" inputmode="numeric" required aria-describedby="income-amount-error"><p id="income-amount-error" class="error" hidden></p></div>
+              <div class="field"><label for="income-date">Дата получения</label><input id="income-date" type="date" required aria-describedby="income-date-display income-date-error"><p id="income-date-display" class="budget-note"></p><p id="income-date-error" class="error" hidden></p></div>
+              <div class="field"><label for="income-comment">Комментарий <span>необязательно</span></label><textarea id="income-comment" rows="3" aria-describedby="income-comment-error"></textarea><p id="income-comment-error" class="error" hidden></p></div>
+            </div>
+            <div class="form-footer"><button id="add-income" class="primary" type="submit">Добавить</button><p id="income-status" class="savings-status" role="status"></p></div>
+          </form>
+        </section>
+        <section class="card" aria-labelledby="income-history-heading">
+          <div class="section-heading"><h2 id="income-history-heading" tabindex="-1">История доходов</h2><span id="income-count"></span></div>
+          <div class="period-total"><span>Всего доходов</span><strong id="income-total" aria-live="polite">0 ₸</strong></div>
+          <p id="income-empty" class="analytics-state">Пока нет доходов</p>
+          <ul id="income-list" class="recent-expenses" aria-label="Доходы"></ul>
+        </section>
       </section>
       <footer>Данные хранятся только в этом браузере.</footer>
     </main>

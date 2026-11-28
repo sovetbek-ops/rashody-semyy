@@ -4,6 +4,7 @@
   const STORAGE_KEY = "family-expenses-v1";
   const BUDGET_KEY = "family-budgets-v1";
   const SAVINGS_KEY = "family-savings-v1";
+  const INCOME_KEY = "family-incomes-v1";
   const categories = ["Продукты", "Транспорт", "Кредит", "Ипотека", "Расходы на секцию ребёнка"];
   const removedCategories = ["Дом", "Другое"];
   const savedCategories = [...categories, "Еда", ...removedCategories];
@@ -12,7 +13,8 @@
     overview: ["Обзор", "Расходы семьи за текущий месяц."],
     expenses: ["Траты", "Записывайте расходы и выбирайте период просмотра."],
     budget: ["Бюджет", "Планируйте расходы и следите за лимитами месяца."],
-    savings: ["Накопления", "Деньги на цели учитываются отдельно от расходов"]
+    savings: ["Накопления", "Деньги на цели учитываются отдельно от расходов"],
+    incomes: ["Доходы", "Записывайте поступления семьи из любых источников."]
   };
 
   function showView(view, focusAmount = false) {
@@ -67,6 +69,120 @@
   let deleteGoalId = null;
   let deleteSnapshot = null;
   let deleteConflict = false;
+  let incomes = { version: 1, records: [] };
+  let incomesReadable = true;
+  let incomeWritePending = false;
+  let renderedIncomes = null;
+  const incomeFields = ["income-name", "income-amount", "income-date", "income-comment"];
+
+  function incomeStorageError(message) {
+    byId("income-storage-error").textContent = message;
+    byId("income-storage-error").hidden = !message;
+  }
+
+  function loadIncomes() {
+    try {
+      const raw = localStorage.getItem(INCOME_KEY);
+      const saved = raw === null ? { version: 1, records: [] } : JSON.parse(raw);
+      const ids = new Set();
+      if (!saved || saved.version !== 1 || !Array.isArray(saved.records) || !saved.records.every((record) => {
+        if (!record || typeof record.id !== "string" || !record.id || ids.has(record.id) ||
+          typeof record.name !== "string" || !record.name.trim() || Array.from(record.name).length > 100 ||
+          !Number.isSafeInteger(record.amount) || record.amount <= 0 || !validDate(record.date) ||
+          typeof record.comment !== "string" || Array.from(record.comment).length > 1000) return false;
+        ids.add(record.id);
+        return true;
+      })) throw new Error("Invalid income data");
+      if (!incomesReadable || JSON.stringify(saved) !== JSON.stringify(incomes)) incomes = saved;
+      incomesReadable = true;
+      incomeStorageError("");
+    } catch {
+      incomesReadable = false;
+      incomeStorageError("Не удалось прочитать доходы. Изменения приостановлены, чтобы не потерять данные. Попробуйте обновить страницу.");
+    }
+  }
+
+  function renderIncomes() {
+    incomeFields.forEach((id) => { byId(id).disabled = incomeWritePending; });
+    byId("add-income").disabled = incomeWritePending || !incomesReadable;
+    const date = byId("income-date").value;
+    byId("income-date-display").textContent = validDate(date) ? displayDate(date) : "";
+    byId("income-total").textContent = incomesReadable ? money(total(incomes.records)) : "—";
+    byId("income-count").textContent = `Записей: ${incomesReadable ? incomes.records.length : "—"}`;
+    byId("income-empty").hidden = !incomesReadable || incomes.records.length > 0;
+    const snapshot = incomesReadable ? incomes : null;
+    if (renderedIncomes === snapshot) return;
+    renderedIncomes = snapshot;
+    const fragment = document.createDocumentFragment();
+    if (incomesReadable) incomes.records.forEach((record) => {
+      const row = document.createElement("li");
+      row.className = "recent-expense";
+      const name = document.createElement("strong");
+      name.textContent = record.name;
+      const amount = document.createElement("strong");
+      amount.className = "recent-amount";
+      amount.textContent = money(record.amount);
+      const date = document.createElement("time");
+      date.className = "recent-date";
+      date.dateTime = record.date;
+      date.textContent = displayDate(record.date);
+      row.append(name, amount, date);
+      if (record.comment) {
+        const comment = document.createElement("p");
+        comment.className = "recent-comment";
+        comment.textContent = record.comment;
+        row.append(comment);
+      }
+      fragment.append(row);
+    });
+    byId("income-list").replaceChildren(fragment);
+  }
+
+  byId("income-date").addEventListener("input", renderIncomes);
+  byId("income-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (incomeWritePending || !incomesReadable) return;
+    byId("income-status").textContent = "";
+    const name = byId("income-name").value.trim();
+    const amount = parseAmount(byId("income-amount").value);
+    const date = byId("income-date").value;
+    const comment = byId("income-comment").value.trim();
+    fieldError("income-name", !name || Array.from(name).length > 100 ? "Введите название от 1 до 100 символов." : "");
+    fieldError("income-amount", amount === null ? "Введите положительную целую сумму до 9 007 199 254 740 991 ₸." : "");
+    fieldError("income-date", validDate(date) ? "" : "Укажите корректную дату.");
+    fieldError("income-comment", Array.from(comment).length > 1000 ? "Комментарий — не больше 1 000 символов." : "");
+    const invalid = incomeFields.find((id) => byId(id).getAttribute("aria-invalid") === "true");
+    if (invalid) { byId(invalid).focus(); return; }
+    incomeWritePending = true;
+    renderIncomes();
+    try {
+      const add = () => {
+        loadIncomes();
+        if (!incomesReadable) return;
+        let id;
+        do { id = savingsId(); } while (incomes.records.some((record) => record.id === id));
+        const next = { version: 1, records: [{ id, name, amount, date, comment }, ...incomes.records] };
+        try {
+          localStorage.setItem(INCOME_KEY, JSON.stringify(next));
+        } catch {
+          incomeStorageError("Не удалось сохранить доход. Введённые поля оставлены. Попробуйте снова.");
+          return;
+        }
+        incomes = next;
+        byId("income-form").reset();
+        byId("income-date").value = localDate();
+        byId("income-status").textContent = "Доход добавлен";
+      };
+      if (navigator.locks?.request) await navigator.locks.request(INCOME_KEY, add);
+      else add();
+    } catch {
+      incomeStorageError("Не удалось обновить доходы. Введённые поля оставлены. Попробуйте снова.");
+    } finally {
+      incomeWritePending = false;
+      renderIncomes();
+      if (byId("income-status").textContent && !byId("view-incomes").hidden) byId("income-name").focus();
+    }
+  });
 
   function savingsError(message) {
     byId("savings-error").textContent = message;
@@ -1124,6 +1240,7 @@
 
   function render(resetBudgetInputs = false) {
     const now = new Date();
+    renderIncomes();
     renderSavings(now);
     if (!dateEdited) byId("date").value = localDate(now);
     // Focus listeners pass an event; only an explicit true resets clean inputs.
@@ -1336,6 +1453,12 @@
   [start, end].forEach((input) => input.addEventListener("input", () => { markPeriod(""); render(); }));
   byId("date").addEventListener("input", () => { dateEdited = true; });
   window.addEventListener("storage", (event) => {
+    if (event.key !== INCOME_KEY && event.key !== null) return;
+    loadIncomes();
+    byId("income-status").textContent = "";
+    renderIncomes();
+  });
+  window.addEventListener("storage", (event) => {
     if (event.key !== BUDGET_KEY && event.key !== STORAGE_KEY && event.key !== SAVINGS_KEY && event.key !== null) return;
     if (event.key === SAVINGS_KEY || event.key === null) {
       loadSavings();
@@ -1350,12 +1473,14 @@
     }
     render(event.key === BUDGET_KEY || event.key === null);
   });
-  window.addEventListener("focus", () => { loadSavings(); render(); });
+  window.addEventListener("focus", () => { loadIncomes(); loadSavings(); render(); });
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") { loadSavings(); render(); }
+    if (document.visibilityState === "visible") { loadIncomes(); loadSavings(); render(); }
   });
   setInterval(render, 60000);
   byId("date").value = localDate();
+  byId("income-date").value = localDate();
+  loadIncomes();
   load();
   loadSavings();
   render();
