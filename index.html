@@ -149,12 +149,20 @@
           <button id="create-article" type="button" class="primary" data-create-article aria-controls="article-editor" aria-expanded="false">Создать статью</button>
           <form id="article-editor" novalidate hidden aria-labelledby="article-form-heading">
             <h3 id="article-form-heading">Новая статья</h3>
+            <p id="article-edit-note" class="budget-note" hidden>Изменение лимита пересчитает весь текущий месяц. Суммы и даты трат сохранятся. История прежних лимитов не ведётся.</p>
+            <p id="article-edit-state" class="error" role="alert" hidden></p>
             <div class="form-grid">
               <div class="field"><label for="article-name">Название</label><input id="article-name" type="text" required aria-describedby="article-name-error" placeholder="Например, Развлечения"><p id="article-name-error" class="error" hidden></p></div>
               <div class="field"><label for="article-amount">Лимит в месяц, ₸</label><input id="article-amount" type="text" inputmode="numeric" required aria-describedby="article-amount-error" placeholder="Например, 20 000"><p id="article-amount-error" class="error" hidden></p></div>
             </div>
             <div class="form-footer"><button id="save-article" type="submit" class="primary">Сохранить</button><button id="cancel-article" type="button">Отмена</button></div>
           </form>
+          <section id="article-action" class="budget-summary" aria-labelledby="article-action-heading" hidden>
+            <h3 id="article-action-heading"></h3>
+            <p id="article-action-description" class="budget-note"></p>
+            <p id="article-action-state" class="error" role="alert" hidden></p>
+            <div class="budget-controls"><button id="cancel-article-action" type="button">Отмена</button><button id="confirm-article-action" type="button"></button></div>
+          </section>
           <p id="article-status" class="budget-status" role="status"></p>
           <div class="budget-summary" aria-label="Итоги бюджета месяца">
             <dl class="budget-totals">
@@ -163,11 +171,16 @@
               <div><dt>Осталось</dt><dd id="budget-remaining">—</dd></div>
             </dl>
             <p id="budget-limit-count" class="budget-note">Лимиты заданы: 0 из 0</p>
-            <p class="budget-note">В расходах учтены все статьи, включая статьи без лимита.</p>
+            <p class="budget-note">В расходах учтены все статьи, включая архивные и статьи без лимита.</p>
             <p id="budget-warning" class="budget-warning" role="status" hidden></p>
           </div>
-          <p id="budget-empty" class="budget-note">Пока нет статей. Создайте первую статью бюджета.</p>
+          <p id="budget-empty" class="budget-note">Активных статей пока нет. Создайте статью или восстановите её из архива.</p>
           <div id="budget-categories"></div>
+          <section id="article-archive" aria-labelledby="article-archive-heading" hidden>
+            <h3 id="article-archive-heading">Архив</h3>
+            <p class="budget-note">Эти статьи исключены из плана. Их траты остаются в истории и итогах.</p>
+            <div id="archived-articles"></div>
+          </section>
         </section>
       </section>
       <section id="view-savings" aria-label="Накопления" hidden>

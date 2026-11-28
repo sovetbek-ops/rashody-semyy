@@ -50,10 +50,15 @@
   let budgets = {};
   let budgetsReadable = false;
   let expenseWritePending = false;
+  let editArticleId = null;
+  let editArticleSnapshot = null;
+  let editArticleConflict = false;
+  let articleAction = null;
   let dateEdited = false;
   let renderedExpenses = [];
   let renderedSelection = null;
   let renderedStorageReadable = true;
+  let renderedExpenseNames = "";
   let savings = { version: 1, goals: [] };
   let savingsReadable = true;
   let savingsWritePending = false;
@@ -1620,36 +1625,172 @@
     }
   }
 
-  function articleNameError(name) {
+  function articleNameError(name, exceptId = null) {
     if (!name || name.length > 100) return "Введите название от 1 до 100 символов.";
-    if (daily.articles.some((article) => article.name.trim().toLocaleLowerCase("ru-RU") === name.toLocaleLowerCase("ru-RU"))) {
-      return "Такая статья уже есть. Выберите другое название.";
+    if (daily.articles.some((article) => article.id !== exceptId && article.name.trim().toLocaleLowerCase("ru-RU") === name.toLocaleLowerCase("ru-RU"))) {
+      return "Такая статья уже есть. Выберите другое название или восстановите статью из архива.";
     }
     return "";
   }
 
   function closeArticleEditor() {
+    const id = editArticleId;
+    editArticleId = null;
+    editArticleSnapshot = null;
+    editArticleConflict = false;
     byId("article-editor").hidden = true;
+    byId("article-editor").reset();
+    fieldError("article-name", "");
+    fieldError("article-amount", "");
     byId("create-article").setAttribute("aria-expanded", "false");
-    byId("create-article").focus();
+    (byId(`article-edit-${id}`) || byId("create-article")).focus();
   }
+
+  function renderArticleEditorState() {
+    const article = daily.articles.find((item) => item.id === editArticleId);
+    if (editArticleId !== null && storageReadable && (!article || JSON.stringify(article) !== editArticleSnapshot)) {
+      editArticleConflict = true;
+    }
+    const message = !storageReadable ? "Статьи недоступны. Попробуйте обновить страницу."
+      : editArticleConflict ? "Статья изменена или удалена в другой вкладке. Отмените правку и откройте статью заново." : "";
+    byId("article-edit-state").textContent = message;
+    byId("article-edit-state").hidden = !message;
+    byId("save-article").disabled = !storageReadable || editArticleConflict;
+  }
+
+  function openArticleEdit(id) {
+    if (expenseWritePending) return;
+    load();
+    const article = storageReadable && daily.articles.find((item) => item.id === id);
+    if (!article) { render(); return; }
+    articleAction = null;
+    editArticleId = id;
+    editArticleSnapshot = JSON.stringify(article);
+    editArticleConflict = false;
+    byId("article-name").value = article.name;
+    byId("article-amount").value = article.limit === null ? "" : String(article.limit).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+    fieldError("article-name", "");
+    fieldError("article-amount", "");
+    byId("article-form-heading").textContent = "Изменить статью";
+    byId("article-edit-note").hidden = false;
+    byId("article-editor").hidden = false;
+    byId("create-article").setAttribute("aria-expanded", "false");
+    byId("article-status").textContent = "";
+    render();
+    byId("article-name").focus();
+  }
+
+  function articleActionMessage(action) {
+    const article = daily.articles.find((item) => item.id === action.id);
+    if (!storageReadable) return "Статьи недоступны. Попробуйте обновить страницу.";
+    if (!article || JSON.stringify(article) !== action.snapshot) action.conflict = true;
+    if (action.type === "delete" && expenses.some((item) => item.category === action.id)) {
+      action.conflict = true;
+      return "У статьи есть траты. Удаление недоступно; используйте архив.";
+    }
+    return action.conflict ? "Статья изменена или удалена в другой вкладке. Отмените действие и откройте статью заново." : "";
+  }
+
+  function renderArticleAction() {
+    byId("article-action").hidden = articleAction === null;
+    if (!articleAction) return;
+    const message = articleActionMessage(articleAction);
+    byId("article-action-state").textContent = message;
+    byId("article-action-state").hidden = !message;
+    byId("confirm-article-action").disabled = Boolean(message);
+  }
+
+  function openArticleAction(id, type) {
+    if (expenseWritePending) return;
+    load();
+    const article = storageReadable && daily.articles.find((item) => item.id === id);
+    if (!article) { render(); return; }
+    const action = { id, type, snapshot: JSON.stringify(article), conflict: false };
+    if (type === "restore") {
+      closeArticleEditor();
+      articleAction = null;
+      void commitArticleAction(action);
+      return;
+    }
+    if (type === "delete" && expenses.some((item) => item.category === id)) { render(); return; }
+    closeArticleEditor();
+    articleAction = action;
+    byId("article-status").textContent = "";
+    byId("article-action-heading").textContent = type === "archive" ? `В архив: «${article.name}»?` : `Удалить статью «${article.name}»?`;
+    byId("article-action-description").textContent = type === "archive"
+      ? "Статья исчезнет из выбора новых трат и текущего плана. Расходы сохранятся в истории и итогах, поэтому общий остаток может уменьшиться. Статью можно восстановить из архива."
+      : "У статьи нет трат. После подтверждения восстановить удалённую статью нельзя.";
+    byId("confirm-article-action").textContent = type === "archive" ? "В архив" : "Удалить";
+    render();
+    byId("cancel-article-action").focus();
+  }
+
+  async function commitArticleAction(action) {
+    if (expenseWritePending) return;
+    byId("article-status").textContent = "";
+    await changeExpenses(() => {
+      load();
+      const message = articleActionMessage(action);
+      if (message) {
+        byId("article-status").textContent = "";
+        if (action.type === "restore") budgetError(message);
+        render();
+        return;
+      }
+      const articles = action.type === "delete" ? daily.articles.filter((item) => item.id !== action.id)
+        : daily.articles.map((item) => item.id === action.id ? { ...item, archived: action.type === "archive" } : item);
+      try {
+        saveDaily({ ...daily, articles });
+      } catch {
+        budgetError("Не удалось сохранить действие со статьёй. Данные не изменены, попробуйте снова.");
+        render();
+        return;
+      }
+      articleAction = null;
+      render();
+      byId("article-status").textContent = action.type === "delete" ? "Статья удалена" : action.type === "archive" ? "Статья в архиве" : "Статья восстановлена";
+      (byId(`article-edit-${action.id}`) || byId("create-article")).focus();
+    });
+  }
+
+  byId("confirm-article-action").addEventListener("click", () => {
+    if (articleAction) void commitArticleAction(articleAction);
+  });
+  byId("cancel-article-action").addEventListener("click", () => {
+    if (expenseWritePending) return;
+    const id = articleAction?.id;
+    articleAction = null;
+    renderArticleAction();
+    (byId(`article-edit-${id}`) || byId("create-article")).focus();
+  });
 
   document.querySelectorAll("[data-create-article]").forEach((button) => {
     button.addEventListener("click", () => {
+      if (expenseWritePending) return;
+      if (editArticleId !== null) closeArticleEditor();
+      articleAction = null;
       showView("budget");
+      byId("article-form-heading").textContent = "Новая статья";
+      byId("article-edit-note").hidden = true;
       byId("article-editor").hidden = false;
       byId("create-article").setAttribute("aria-expanded", "true");
       byId("article-status").textContent = "";
       byId("article-name").focus();
     });
   });
-  byId("cancel-article").addEventListener("click", closeArticleEditor);
+  byId("cancel-article").addEventListener("click", () => {
+    if (!expenseWritePending) closeArticleEditor();
+  });
   byId("article-editor").addEventListener("submit", (event) => {
     event.preventDefault();
     if (expenseWritePending) return;
     const name = byId("article-name").value.trim();
     const amount = parseAmount(byId("article-amount").value);
-    fieldError("article-name", articleNameError(name));
+    renderArticleEditorState();
+    if (!storageReadable || editArticleConflict) return;
+    const editingId = editArticleId;
+    const editingSnapshot = editArticleSnapshot;
+    fieldError("article-name", articleNameError(name, editingId));
     fieldError("article-amount", amount === null ? "Введите положительную целую сумму до 9 007 199 254 740 991 ₸." : "");
     const invalid = byId("article-editor").querySelector('[aria-invalid="true"]');
     if (invalid) { invalid.focus(); return; }
@@ -1659,25 +1800,31 @@
     void changeExpenses(() => {
       load();
       if (!storageReadable) { render(); return; }
-      const error = articleNameError(name);
+      renderArticleEditorState();
+      if (editingId !== editArticleId || editingSnapshot !== editArticleSnapshot || editArticleConflict) { render(); return; }
+      const error = articleNameError(name, editingId);
       fieldError("article-name", error);
       if (error) { byId("article-name").focus(); render(); return; }
-      let id;
-      do { id = savingsId(); } while (daily.articles.some((article) => article.id === id));
+      let id = editingId;
+      if (id === null) do { id = savingsId(); } while (daily.articles.some((article) => article.id === id));
+      const articles = editingId === null ? [...daily.articles, { id, name, limit: amount, period: "month", archived: false }]
+        : daily.articles.map((article) => article.id === id ? { ...article, name, limit: amount } : article);
       try {
-        saveDaily({ ...daily, articles: [...daily.articles, { id, name, limit: amount, period: "month", archived: false }] });
+        saveDaily({ ...daily, articles });
       } catch {
         budgetError("Не удалось сохранить статью. Поля сохранены, попробуйте снова.");
         render();
         return;
       }
       if (byId("article-name").value === enteredName && byId("article-amount").value === enteredAmount) {
-        byId("article-editor").reset();
         closeArticleEditor();
+      } else if (editingId !== null) {
+        editArticleSnapshot = JSON.stringify(daily.articles.find((article) => article.id === editingId));
       }
       render();
-      byId("category").value = id;
-      byId("article-status").textContent = "Статья создана";
+      if (editingId === null) byId("category").value = id;
+      if (byId("article-editor").hidden) (byId(`article-edit-${id}`) || byId("create-article")).focus();
+      byId("article-status").textContent = editingId === null ? "Статья создана" : "Статья изменена";
     });
   });
 
@@ -1705,34 +1852,60 @@
     byId("category-hint").hidden = active.length > 0;
     byId("expense-create-article").hidden = !storageReadable || active.length > 0;
     byId("create-article").disabled = !storageReadable;
-    byId("save-article").disabled = !storageReadable;
-    byId("budget-empty").hidden = !storageReadable || categories.length > 0;
+    renderArticleEditorState();
+    renderArticleAction();
+    byId("budget-empty").hidden = !storageReadable || active.length > 0;
   }
 
+  let renderedArticleCards = "";
   function renderBudget(now) {
     const month = localDate(now).slice(0, 7);
     budgets = { [month]: Object.fromEntries(daily.articles
       .filter((article) => !article.archived && article.limit !== null)
       .map((article) => [article.id, article.limit])) };
     renderArticleChoices();
-    const fragment = document.createDocumentFragment();
-    categories.forEach((category, index) => {
-      const row = document.createElement("section");
-      row.className = "budget-category";
-      const heading = document.createElement("h3");
-      heading.id = `budget-heading-${index}`;
-      heading.textContent = categoryName(category);
-      row.setAttribute("aria-labelledby", heading.id);
-      row.append(heading);
-      [["limit", "budget-limit"], ["spent", "budget-amount"], ["remaining", "budget-amount"], ["warning", "budget-warning"]].forEach(([key, className]) => {
-        const text = document.createElement("p");
-        text.id = `budget-${key}-${index}`;
-        text.className = className;
-        row.append(text);
+    const cardSignature = JSON.stringify(daily.articles);
+    if (renderedArticleCards !== cardSignature) {
+      const fragment = document.createDocumentFragment();
+      const archive = document.createDocumentFragment();
+      categories.forEach((category, index) => {
+        const article = daily.articles[index];
+        const row = document.createElement("section");
+        row.className = "budget-category";
+        const heading = document.createElement("h3");
+        heading.id = `budget-heading-${index}`;
+        heading.textContent = categoryName(category);
+        row.setAttribute("aria-labelledby", heading.id);
+        row.append(heading);
+        [["limit", "budget-limit"], ["spent", "budget-amount"], ["remaining", "budget-amount"], ["warning", "budget-warning"]].forEach(([key, className]) => {
+          const text = document.createElement("p");
+          text.id = `budget-${key}-${index}`;
+          text.className = className;
+          row.append(text);
+        });
+        const controls = document.createElement("div");
+        controls.className = "budget-controls";
+        [["edit", "Изменить"], [article.archived ? "restore" : "archive", article.archived ? "Восстановить" : "В архив"], ["delete", "Удалить"]].forEach(([action, label]) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.id = `article-${action}-${category}`;
+          button.textContent = label;
+          button.setAttribute("aria-label", `${label}: «${article.name}»`);
+          button.addEventListener("click", () => action === "edit" ? openArticleEdit(category) : openArticleAction(category, action));
+          if (action === "delete") button.setAttribute("aria-describedby", `article-delete-hint-${category}`);
+          controls.append(button);
+        });
+        const hint = document.createElement("p");
+        hint.id = `article-delete-hint-${category}`;
+        hint.className = "budget-note";
+        row.append(controls, hint);
+        (article.archived ? archive : fragment).append(row);
       });
-      fragment.append(row);
-    });
-    byId("budget-categories").replaceChildren(fragment);
+      byId("budget-categories").replaceChildren(fragment);
+      byId("archived-articles").replaceChildren(archive);
+      renderedArticleCards = cardSignature;
+    }
+    byId("article-archive").hidden = !daily.articles.some((article) => article.archived);
     byId("budget-month").textContent = now.toLocaleDateString("ru-RU", { month: "long", year: "numeric" });
     byId("month-label").textContent = byId("budget-month").textContent;
     const spentByCategory = new Map(categories.map((category) => [category, 0n]));
@@ -1748,13 +1921,16 @@
     byId("budget-total").textContent = !budgetsReadable ? "—" : limits.length ? money(budgetTotal) : "Не задан";
     byId("budget-spent").textContent = storageReadable ? money(spentTotal) : "—";
     byId("budget-remaining").textContent = remainingTotal === null ? "—" : remainingTotal < 0n ? `−${money(-remainingTotal)}` : money(remainingTotal);
-    byId("budget-limit-count").textContent = `Лимиты заданы: ${budgetsReadable ? limits.length : "—"} из ${categories.length}`;
+    byId("budget-limit-count").textContent = `Лимиты заданы: ${budgetsReadable ? limits.length : "—"} из ${daily.articles.filter((article) => !article.archived).length}`;
     const totalWarning = byId("budget-warning");
     totalWarning.textContent = remainingTotal !== null && remainingTotal < 0n ? `Перерасход бюджета: ${money(-remainingTotal)}` : "";
     totalWarning.hidden = !totalWarning.textContent;
     categories.forEach((category, index) => {
+      const article = daily.articles[index];
       const amount = budgets[month][category];
-      byId(`budget-limit-${index}`).textContent = !budgetsReadable ? "Лимит: —" : amount === undefined ? "Лимит не задан" : `Лимит в месяц: ${money(amount)}`;
+      byId(`budget-limit-${index}`).textContent = !budgetsReadable ? "Лимит: —"
+        : article.archived ? article.limit === null ? "В архиве · Лимит не задан" : `В архиве · Сохранённый лимит в месяц: ${money(article.limit)}`
+        : amount === undefined ? "Лимит не задан" : `Лимит в месяц: ${money(amount)}`;
       const spent = spentByCategory.get(category);
       const remaining = storageReadable && budgetsReadable && amount !== undefined ? BigInt(amount) - spent : null;
       byId(`budget-spent-${index}`).textContent = `Потрачено: ${storageReadable ? money(spent) : "—"}`;
@@ -1762,6 +1938,14 @@
       const warning = byId(`budget-warning-${index}`);
       warning.textContent = remaining !== null && remaining < 0n ? `Перерасход: ${money(-remaining)}` : "";
       warning.hidden = !warning.textContent;
+      const hasExpenses = expenses.some((item) => item.category === category);
+      byId(`article-edit-${category}`).disabled = !storageReadable;
+      byId(`article-${article.archived ? "restore" : "archive"}-${category}`).disabled = !storageReadable;
+      byId(`article-delete-${category}`).disabled = !storageReadable || hasExpenses;
+      const hint = byId(`article-delete-hint-${category}`);
+      hint.textContent = !storageReadable ? "Не удалось проверить траты. Удаление недоступно."
+        : hasExpenses ? article.archived ? "Есть траты. Статью с тратами удалить нельзя." : "Есть траты. Вместо удаления используйте «В архив»." : "";
+      hint.hidden = !hint.textContent;
     });
     renderOverviewBudget(month, spentByCategory, budgetTotal, spentTotal, remainingTotal, limits.length);
     renderOverviewAnalytics(now, month, spentByCategory, spentTotal);
@@ -1875,15 +2059,16 @@
     byId("overview-remaining").textContent = remainingTotal === null ? "—" : remainingTotal < 0n ? `−${money(-remainingTotal)}` : money(remainingTotal);
     byId("overview-remaining").className = remainingTotal !== null && remainingTotal < 0n ? "is-over-budget" : "";
     byId("overview-expense-count").textContent = storageReadable ? String(expenses.filter((item) => item.date.startsWith(`${month}-`)).length) : "—";
-    byId("overview-limit-count").textContent = `Лимиты: ${budgetsReadable ? limitCount : "—"} из ${categories.length}`;
+    byId("overview-limit-count").textContent = `Лимиты: ${budgetsReadable ? limitCount : "—"} из ${daily.articles.filter((article) => !article.archived).length}`;
     byId("overview-budget-note").textContent = !budgetsReadable ? "Лимиты недоступны. Бюджет и остатки пока неизвестны." : !limitCount
       ? "Задайте лимиты в разделе «Бюджет», чтобы видеть остатки."
-      : "Остаток рассчитан по заданным лимитам. Расходы включают все статьи, в том числе без лимита.";
+      : "Остаток рассчитан по активным лимитам. Расходы включают все статьи, в том числе архивные и без лимита.";
     const warning = byId("overview-budget-warning");
     warning.textContent = remainingTotal !== null && remainingTotal < 0n ? `Перерасход бюджета: ${money(-remainingTotal)}` : "";
     warning.hidden = !warning.textContent;
     const fragment = document.createDocumentFragment();
     categories.forEach((category, index) => {
+      if (daily.articles[index].archived) return;
       const row = document.createElement("section");
       row.className = "overview-budget-category";
       const heading = document.createElement("h3");
@@ -1964,7 +2149,8 @@
     byId("empty-state").hidden = !storageReadable || visible.length > 0 || Boolean(invalidPeriod);
     byId("empty-state").textContent = expenses.length ? "За этот период трат нет" : "Пока нет трат";
     // Keep the actual controls (and keyboard focus) while the list is unchanged.
-    if (renderedStorageReadable === storageReadable && renderedSelection === selectedExpense &&
+    const expenseNames = JSON.stringify(daily.articles.map(({ id, name }) => [id, name]));
+    if (renderedExpenseNames === expenseNames && renderedStorageReadable === storageReadable && renderedSelection === selectedExpense &&
       renderedExpenses.length === visible.length && renderedExpenses.every((item, index) => item === visible[index])) return;
     const fragment = document.createDocumentFragment();
     visible.forEach((item) => {
@@ -2011,6 +2197,7 @@
     renderedExpenses = visible;
     renderedSelection = selectedExpense;
     renderedStorageReadable = storageReadable;
+    renderedExpenseNames = expenseNames;
   }
 
   async function changeExpenses(action) {
