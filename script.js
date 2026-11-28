@@ -287,6 +287,117 @@
   let obligationDateEdited = false;
   let obligationConfirmation = null;
   let renderedObligations = "";
+  let obligationPaymentAction = null;
+
+  function renderFamilyMoney() {
+    const month = localDate().slice(0, 7);
+    const income = incomesReadable ? total(incomes.records.filter((item) => item.date.startsWith(month))) : null;
+    const spent = storageReadable ? total(expenses.filter((item) => item.date.startsWith(month))) : null;
+    const paid = obligationsReadable ? total(obligations.payments.filter((item) => item.status === "paid" && item.paidDate.startsWith(month))) : null;
+    const reserved = obligationsReadable ? total(obligations.payments.filter((item) => item.status === "unpaid")) : null;
+    const available = [income, spent, paid, reserved].includes(null) ? null : income - spent - paid - reserved;
+    const formatted = (amount) => amount === null ? "—" : amount < 0n ? `−${money(-amount)}` : money(amount);
+    ["overview", "budget"].forEach((view) => {
+      Object.entries({ income, expenses: spent, paid, reserved, available }).forEach(([name, amount]) => {
+        byId(`${view}-family-${name}`).textContent = formatted(amount);
+      });
+      const warning = byId(`${view}-family-warning`);
+      warning.textContent = available === null ? "Не удалось прочитать часть данных. Доступная сумма неизвестна." : available < 0n ? `Не хватает: ${money(-available)}` : "";
+      warning.hidden = !warning.textContent;
+    });
+  }
+
+  function obligationPaymentSnapshot(payment) {
+    return JSON.stringify([payment, obligations.rules.find((rule) => rule.id === payment.ruleId)]);
+  }
+
+  function renderObligationPayment() {
+    byId("obligation-payment-editor").hidden = !obligationPaymentAction;
+    if (!obligationPaymentAction) return;
+    const action = obligationPaymentAction;
+    const payment = obligationsReadable ? obligations.payments.find((item) => item.id === action.id) : null;
+    if (obligationsReadable && (!payment || obligationPaymentSnapshot(payment) !== action.snapshot)) action.stale = true;
+    byId("obligation-payment-state").textContent = !obligationsReadable ? "Не удалось прочитать платежи. Действие приостановлено." : action.stale ? "Платёж изменён или удалён. Закройте подтверждение и откройте платёж заново." : "";
+    byId("confirm-obligation-payment").disabled = obligationWritePending || !obligationsReadable || action.stale;
+    byId("cancel-obligation-payment").disabled = obligationWritePending;
+    byId("obligation-paid-date").disabled = obligationWritePending || action.cancel;
+    byId("obligation-paid-date").max = localDate();
+    const date = byId("obligation-paid-date").value;
+    byId("obligation-paid-date-display").textContent = validDate(date) ? `Выбрано: ${displayDate(date)}` : "";
+  }
+
+  function openObligationPayment(id) {
+    if (obligationWritePending) return;
+    loadObligations();
+    const payment = obligationsReadable ? obligations.payments.find((item) => item.id === id) : null;
+    if (!payment) { renderObligations(); return; }
+    const rule = obligations.rules.find((item) => item.id === payment.ruleId);
+    const cancel = payment.status === "paid";
+    obligationPaymentAction = { id, cancel, snapshot: obligationPaymentSnapshot(payment), stale: false };
+    byId("obligation-payment-heading").textContent = cancel ? "Отменить оплату?" : "Оплатить платёж?";
+    byId("obligation-payment-details").textContent = `${rule.name} — ${money(payment.amount)}. Срок: ${displayDate(payment.date)}.${cancel ? ` Оплачен: ${displayDate(payment.paidDate)}.` : ""}`;
+    byId("obligation-payment-note").textContent = cancel ? "Сумма вернётся в резерв и будет исключена из обязательных оплат месяца фактической оплаты." : "Оплата учтётся в деньгах семьи. Повторно добавлять её в «Траты» не нужно.";
+    byId("obligation-paid-date-field").hidden = cancel;
+    byId("obligation-paid-date").value = localDate();
+    fieldError("obligation-paid-date", "");
+    byId("confirm-obligation-payment").textContent = cancel ? "Отменить оплату" : "Оплатить";
+    byId("obligation-status").textContent = "";
+    renderObligations();
+    byId("cancel-obligation-payment").focus();
+  }
+
+  function focusObligationPayment(id) {
+    if (!byId("view-obligations").hidden) (byId(`obligation-action-${id}`) || byId("obligation-list-heading")).focus();
+  }
+
+  byId("obligation-list-filter").addEventListener("change", renderObligations);
+  byId("obligation-paid-date").addEventListener("input", renderObligationPayment);
+  byId("cancel-obligation-payment").addEventListener("click", () => {
+    if (obligationWritePending || !obligationPaymentAction) return;
+    const id = obligationPaymentAction.id;
+    obligationPaymentAction = null;
+    renderObligations();
+    focusObligationPayment(id);
+  });
+  byId("obligation-payment-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (obligationWritePending || !obligationPaymentAction || obligationPaymentAction.stale || !obligationsReadable) return;
+    const action = obligationPaymentAction;
+    const date = byId("obligation-paid-date").value;
+    fieldError("obligation-paid-date", !action.cancel && (!validDate(date) || date > localDate()) ? "Укажите существующую дату не позже сегодняшней." : "");
+    if (byId("obligation-paid-date").getAttribute("aria-invalid") === "true") { byId("obligation-paid-date").focus(); return; }
+    obligationWritePending = true;
+    renderObligations();
+    let saved = false;
+    try {
+      const change = () => {
+        loadObligations();
+        renderObligationPayment();
+        if (!obligationsReadable || action.stale) return;
+        if (!action.cancel && date > localDate()) {
+          fieldError("obligation-paid-date", "Дата оплаты не должна быть в будущем.");
+          return;
+        }
+        const next = { ...obligations, payments: obligations.payments.map((payment) => payment.id === action.id ? {
+          ...payment, status: action.cancel ? "unpaid" : "paid", paidDate: action.cancel ? null : date, changeId: savingsId()
+        } : payment) };
+        localStorage.setItem(OBLIGATION_KEY, JSON.stringify(next));
+        obligations = next;
+        obligationPaymentAction = null;
+        byId("obligation-status").textContent = action.cancel ? "Оплата отменена" : "Платёж оплачен";
+        saved = true;
+      };
+      if (navigator.locks?.request) await navigator.locks.request(OBLIGATION_KEY, change);
+      else change();
+    } catch {
+      obligationStorageError("Не удалось сохранить оплату. Данные не изменены, попробуйте снова.");
+    } finally {
+      obligationWritePending = false;
+      renderObligations();
+      if (saved) focusObligationPayment(action.id);
+      else if (!byId("view-obligations").hidden) byId("cancel-obligation-payment").focus();
+    }
+  });
 
   function obligationStorageError(message) {
     byId("obligation-storage-error").textContent = message;
@@ -349,6 +460,8 @@
   }
 
   function renderObligations() {
+    renderFamilyMoney();
+    renderObligationPayment();
     const today = localDate();
     if (!obligationDateEdited && !obligationConfirmation) byId("obligation-date").value = today;
     const date = byId("obligation-date").value;
@@ -364,16 +477,19 @@
       byId("obligation-confirm-details").textContent = `${obligationFrequencies[pending.frequency]}. Сроки: ${displayDate(pending.dates[0])}${pending.dates.length > 1 ? ` — ${displayDate(pending.dates[pending.dates.length - 1])}` : ""}.`;
       byId("obligation-confirm-total").textContent = `Платежей: ${pending.dates.length}. Сумма для резерва: ${money(BigInt(pending.amount) * BigInt(pending.dates.length))}`;
     }
-    byId("obligation-count").textContent = `Записей: ${obligationsReadable ? obligations.payments.length : "—"}`;
-    byId("obligation-empty").textContent = obligationsReadable ? "Пока нет обязательных платежей" : "Не удалось прочитать платежи. Список недоступен.";
-    byId("obligation-empty").hidden = obligationsReadable && obligations.payments.length > 0;
-    const signature = JSON.stringify([obligationsReadable, obligations, today]);
+    const filter = byId("obligation-list-filter").value;
+    const month = today.slice(0, 7);
+    const payments = obligationsReadable ? obligations.payments.filter((payment) => filter === "all" || (filter === "paid" ? payment.status === "paid" :
+      payment.status === "unpaid" || payment.date.startsWith(month) || payment.paidDate?.startsWith(month))).sort((a, b) =>
+      Number(a.status === "paid") - Number(b.status === "paid") || a.date.localeCompare(b.date)) : [];
+    byId("obligation-count").textContent = `Записей: ${obligationsReadable ? payments.length : "—"}`;
+    byId("obligation-empty").textContent = !obligationsReadable ? "Не удалось прочитать платежи. Список недоступен." : !obligations.payments.length ? "Пока нет обязательных платежей" : "Нет платежей для этого списка";
+    byId("obligation-empty").hidden = obligationsReadable && payments.length > 0;
+    const signature = JSON.stringify([obligationsReadable, obligations, today, filter, obligationWritePending]);
     if (signature === renderedObligations) return;
     renderedObligations = signature;
     const fragment = document.createDocumentFragment();
     const rules = new Map(obligations.rules.map((rule) => [rule.id, rule]));
-    const payments = obligationsReadable ? [...obligations.payments].sort((a, b) =>
-      Number(a.status === "paid") - Number(b.status === "paid") || a.date.localeCompare(b.date)) : [];
     payments.forEach((payment) => {
       const rule = rules.get(payment.ruleId);
       const item = document.createElement("li");
@@ -390,6 +506,17 @@
       status.className = "recent-comment";
       status.textContent = payment.status === "paid" ? `Оплачен: ${displayDate(payment.paidDate)}` : `Не оплачен${payment.date < today ? " · Просрочен" : ""}`;
       item.append(name, amount, details, status);
+      const actions = document.createElement("div");
+      actions.className = "goal-actions income-actions";
+      const button = document.createElement("button");
+      button.type = "button";
+      button.id = `obligation-action-${payment.id}`;
+      button.textContent = payment.status === "paid" ? "Отменить оплату" : "Оплатить";
+      button.setAttribute("aria-label", `${button.textContent}: ${rule.name}, ${money(payment.amount)}, срок ${displayDate(payment.date)}`);
+      button.disabled = obligationWritePending;
+      button.addEventListener("click", () => openObligationPayment(payment.id));
+      actions.append(button);
+      item.append(actions);
       fragment.append(item);
     });
     byId("obligation-list").replaceChildren(fragment);
@@ -526,6 +653,7 @@
   }
 
   function renderIncomes() {
+    renderFamilyMoney();
     updateIncomeDates();
     renderIncomeEdit();
     renderIncomeDelete();

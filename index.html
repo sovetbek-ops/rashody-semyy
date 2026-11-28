@@ -39,12 +39,24 @@
         <div class="overview-month"><p class="eyebrow">ТЕКУЩИЙ МЕСЯЦ</p><p id="month-label"></p></div>
         <dl class="overview-metrics" aria-label="Показатели текущего месяца">
           <div class="metric metric-spent"><dt>Потрачено</dt><dd id="month-total" aria-live="polite">0 ₸</dd><dd class="metric-note">Все категории месяца</dd></div>
-          <div class="metric"><dt>Бюджет</dt><dd id="overview-budget-total">Не задан</dd><dd id="overview-limit-count" class="metric-note">Лимиты: 0 из 5</dd></div>
+          <div class="metric"><dt>Бюджет по лимитам</dt><dd id="overview-budget-total">Не задан</dd><dd id="overview-limit-count" class="metric-note">Лимиты: 0 из 5</dd></div>
           <div class="metric"><dt>Осталось</dt><dd id="overview-remaining">—</dd><dd class="metric-note">От заданного бюджета</dd></div>
           <div class="metric"><dt>Записей за месяц</dt><dd id="overview-expense-count">0</dd><dd class="metric-note">По датам трат</dd></div>
         </dl>
         <p id="overview-budget-note" class="budget-note">Задайте лимиты в разделе «Бюджет».</p>
         <p id="overview-budget-warning" class="budget-warning" role="status" hidden></p>
+        <section class="card" aria-labelledby="overview-family-heading">
+          <h2 id="overview-family-heading">Деньги семьи</h2>
+          <p class="budget-note">Доходы и расходы текущего месяца. В резерве — все неоплаченные обязательства, включая будущие и просроченные.</p>
+          <dl class="goal-values">
+            <div><dt>Доходы месяца</dt><dd id="overview-family-income">0 ₸</dd></div>
+            <div><dt>Обычные траты</dt><dd id="overview-family-expenses">0 ₸</dd></div>
+            <div><dt>Оплачено обязательных</dt><dd id="overview-family-paid">0 ₸</dd></div>
+            <div><dt>В резерве</dt><dd id="overview-family-reserved">0 ₸</dd></div>
+            <div><dt>Доступно</dt><dd id="overview-family-available" aria-live="polite">0 ₸</dd></div>
+          </dl>
+          <p id="overview-family-warning" class="budget-warning" role="status" hidden></p>
+        </section>
         <div class="overview-analytics">
           <section class="card" aria-labelledby="daily-heading">
             <h2 id="daily-heading">Расходы по дням</h2>
@@ -118,8 +130,20 @@
     </section>
       </section>
       <section id="view-budget" aria-label="Бюджет" hidden>
+        <section class="card" aria-labelledby="budget-family-heading">
+          <h2 id="budget-family-heading">Деньги семьи</h2>
+          <p class="budget-note">Доходы и расходы текущего месяца. В резерве — все неоплаченные обязательства, включая будущие и просроченные.</p>
+          <dl class="goal-values">
+            <div><dt>Доходы месяца</dt><dd id="budget-family-income">0 ₸</dd></div>
+            <div><dt>Обычные траты</dt><dd id="budget-family-expenses">0 ₸</dd></div>
+            <div><dt>Оплачено обязательных</dt><dd id="budget-family-paid">0 ₸</dd></div>
+            <div><dt>В резерве</dt><dd id="budget-family-reserved">0 ₸</dd></div>
+            <div><dt>Доступно</dt><dd id="budget-family-available" aria-live="polite">0 ₸</dd></div>
+          </dl>
+          <p id="budget-family-warning" class="budget-warning" role="status" hidden></p>
+        </section>
         <section class="card" aria-labelledby="budget-heading">
-          <h2 id="budget-heading">Бюджет месяца</h2>
+          <h2 id="budget-heading">Бюджет по лимитам</h2>
           <p id="budget-month" class="budget-note"></p>
           <p class="budget-note">Задайте лимиты на этот месяц. В новом месяце их нужно задать заново.</p>
           <div class="budget-summary" aria-label="Итоги бюджета месяца">
@@ -215,7 +239,7 @@
       <section id="view-obligations" aria-label="Обязательные платежи" hidden>
         <section class="card" aria-labelledby="obligation-form-heading">
           <h2 id="obligation-form-heading">Добавить платёж</h2>
-          <p id="obligation-limits" class="budget-note">Сохранённые платежи пока нельзя изменить или удалить. Сейчас доступны создание и просмотр; оплата, расчёт доступных денег и автоматическое повторение ещё не включены.</p>
+          <p id="obligation-limits" class="budget-note">Сохранённые платежи пока нельзя изменить или удалить. Автоматическое создание следующих платежей ещё не включено.</p>
           <form id="obligation-form" novalidate aria-describedby="obligation-limits">
             <div class="form-grid">
               <div class="field"><label for="obligation-name">Название</label><input id="obligation-name" type="text" required aria-describedby="obligation-name-error"><p id="obligation-name-error" class="error" hidden></p></div>
@@ -234,9 +258,24 @@
             <div class="form-footer"><button id="cancel-obligation" type="button">Отмена</button><button id="confirm-obligation" class="primary" type="button">Создать платежи</button></div>
           </section>
         </section>
+        <section id="obligation-payment-editor" class="card" aria-labelledby="obligation-payment-heading" hidden>
+          <h2 id="obligation-payment-heading">Оплатить платёж?</h2>
+          <p id="obligation-payment-details" class="goal-description"></p>
+          <p id="obligation-payment-note" class="budget-note"></p>
+          <form id="obligation-payment-form" novalidate>
+            <div id="obligation-paid-date-field" class="field">
+              <label for="obligation-paid-date">Фактическая дата оплаты</label>
+              <input id="obligation-paid-date" type="date" required aria-describedby="obligation-paid-date-display obligation-paid-date-error">
+              <p id="obligation-paid-date-display" class="budget-note"></p><p id="obligation-paid-date-error" class="error" hidden></p>
+            </div>
+            <p id="obligation-payment-state" class="error" role="status"></p>
+            <div class="form-footer"><button id="cancel-obligation-payment" type="button">Отмена</button><button id="confirm-obligation-payment" class="primary" type="submit">Оплатить</button></div>
+          </form>
+        </section>
         <section class="card" aria-labelledby="obligation-list-heading">
           <div class="section-heading"><h2 id="obligation-list-heading" tabindex="-1">Платежи</h2><span id="obligation-count"></span></div>
-          <p class="budget-note">Все созданные неоплаченные платежи, включая будущие и просроченные.</p>
+          <div class="field"><label for="obligation-list-filter">Показать</label><select id="obligation-list-filter"><option value="active">Текущие и неоплаченные</option><option value="paid">Оплаченные за все даты</option><option value="all">Все платежи</option></select></div>
+          <p class="budget-note">В текущих — платежи месяца по сроку или дате оплаты и все неоплаченные, включая будущие и просроченные. Фильтр не меняет резерв.</p>
           <p id="obligation-empty" class="analytics-state">Пока нет обязательных платежей</p>
           <ul id="obligation-list" class="recent-expenses" aria-label="Обязательные платежи"></ul>
         </section>
