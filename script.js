@@ -2423,7 +2423,10 @@
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible") { load(); loadObligations(); loadIncomes(); loadSavings(); render(); }
   });
-  setInterval(render, 60000);
+  setInterval(() => {
+    load();
+    render();
+  }, 60000);
   byId("date").value = localDate();
   byId("income-date").value = localDate();
   loadObligations();
