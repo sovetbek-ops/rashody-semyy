@@ -225,7 +225,14 @@
         </section>
         <section class="card" aria-labelledby="income-history-heading">
           <div class="section-heading"><h2 id="income-history-heading" tabindex="-1">История доходов</h2><span id="income-count"></span></div>
-          <div class="period-total"><span>Всего доходов</span><strong id="income-total" aria-live="polite">0 ₸</strong></div>
+          <fieldset>
+            <legend>Период</legend>
+            <div class="period-dates"><div class="field"><label for="income-period-start">С</label><input id="income-period-start" type="date" aria-describedby="income-period-display income-period-error"></div><div class="field"><label for="income-period-end">По</label><input id="income-period-end" type="date" aria-describedby="income-period-display income-period-error"></div></div>
+            <div class="shortcuts" aria-label="Период доходов"><button type="button" data-income-period="1" aria-pressed="false">Сутки</button><button type="button" data-income-period="7" aria-pressed="false">7 дней</button><button type="button" data-income-period="14" aria-pressed="false">14 дней</button><button type="button" data-income-period="month" aria-pressed="false">Месяц</button><button type="button" data-income-period="all" aria-pressed="true">Все</button></div>
+            <p id="income-period-display" class="budget-note">Все даты</p>
+            <p id="income-period-error" class="error" role="alert" hidden></p>
+          </fieldset>
+          <div class="period-total"><span>Итого за период</span><strong id="income-total" aria-live="polite">0 ₸</strong></div>
           <p id="income-empty" class="analytics-state">Пока нет доходов</p>
           <ul id="income-list" class="recent-expenses" aria-label="Доходы"></ul>
         </section>

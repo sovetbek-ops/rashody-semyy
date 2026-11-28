@@ -73,6 +73,10 @@
   let incomesReadable = true;
   let incomeWritePending = false;
   let renderedIncomes = null;
+  let incomeActivePeriod = "all";
+  let incomeDateEdited = false;
+  const incomeStart = byId("income-period-start");
+  const incomeEnd = byId("income-period-end");
   const incomeFields = ["income-name", "income-amount", "income-date", "income-comment"];
 
   function incomeStorageError(message) {
@@ -102,19 +106,57 @@
     }
   }
 
+  function markIncomePeriod(period) {
+    incomeActivePeriod = period;
+    document.querySelectorAll("[data-income-period]").forEach((button) => {
+      button.setAttribute("aria-pressed", String(button.dataset.incomePeriod === period));
+    });
+  }
+
+  function updateIncomeDates() {
+    const now = new Date();
+    if (!incomeDateEdited) byId("income-date").value = localDate(now);
+    if (!incomeActivePeriod || incomeActivePeriod === "all") return;
+    const first = new Date(now);
+    let last = localDate(now);
+    if (incomeActivePeriod === "month") {
+      first.setDate(1);
+      last = localDate(new Date(now.getFullYear(), now.getMonth() + 1, 0));
+    } else {
+      first.setDate(first.getDate() - Number(incomeActivePeriod) + 1);
+    }
+    incomeStart.value = localDate(first);
+    incomeEnd.value = last;
+  }
+
   function renderIncomes() {
+    updateIncomeDates();
     incomeFields.forEach((id) => { byId(id).disabled = incomeWritePending; });
     byId("add-income").disabled = incomeWritePending || !incomesReadable;
     const date = byId("income-date").value;
     byId("income-date-display").textContent = validDate(date) ? displayDate(date) : "";
-    byId("income-total").textContent = incomesReadable ? money(total(incomes.records)) : "—";
-    byId("income-count").textContent = `Записей: ${incomesReadable ? incomes.records.length : "—"}`;
-    byId("income-empty").hidden = !incomesReadable || incomes.records.length > 0;
-    const snapshot = incomesReadable ? incomes : null;
+    const invalidPeriod = Boolean((incomeStart.value && !validDate(incomeStart.value)) ||
+      (incomeEnd.value && !validDate(incomeEnd.value)) ||
+      (incomeStart.value && incomeEnd.value && incomeStart.value > incomeEnd.value));
+    byId("income-period-error").textContent = invalidPeriod ? "Проверьте период: дата «С» должна быть не позже даты «По»." : "";
+    byId("income-period-error").hidden = !invalidPeriod;
+    [incomeStart, incomeEnd].forEach((input) => input.setAttribute("aria-invalid", String(invalidPeriod)));
+    byId("income-period-display").textContent = invalidPeriod ? "" : [
+      incomeStart.value ? `С ${displayDate(incomeStart.value)}` : "",
+      incomeEnd.value ? `По ${displayDate(incomeEnd.value)}` : ""
+    ].filter(Boolean).join(" · ") || "Все даты";
+    const available = incomesReadable && !invalidPeriod;
+    const visible = available ? incomes.records.filter((record) =>
+      (!incomeStart.value || record.date >= incomeStart.value) && (!incomeEnd.value || record.date <= incomeEnd.value)) : [];
+    byId("income-total").textContent = available ? money(total(visible)) : "—";
+    byId("income-count").textContent = `Записей: ${available ? visible.length : "—"}`;
+    byId("income-empty").hidden = !available || visible.length > 0;
+    byId("income-empty").textContent = incomes.records.length ? "За этот период доходов нет" : "Пока нет доходов";
+    const snapshot = available ? JSON.stringify(visible) : null;
     if (renderedIncomes === snapshot) return;
     renderedIncomes = snapshot;
     const fragment = document.createDocumentFragment();
-    if (incomesReadable) incomes.records.forEach((record) => {
+    visible.forEach((record) => {
       const row = document.createElement("li");
       row.className = "recent-expense";
       const name = document.createElement("strong");
@@ -138,10 +180,22 @@
     byId("income-list").replaceChildren(fragment);
   }
 
-  byId("income-date").addEventListener("input", renderIncomes);
+  document.querySelectorAll("[data-income-period]").forEach((button) => {
+    button.addEventListener("click", () => {
+      markIncomePeriod(button.dataset.incomePeriod);
+      if (incomeActivePeriod === "all") { incomeStart.value = ""; incomeEnd.value = ""; }
+      renderIncomes();
+    });
+  });
+  [incomeStart, incomeEnd].forEach((input) => input.addEventListener("input", () => {
+    markIncomePeriod("");
+    renderIncomes();
+  }));
+  byId("income-date").addEventListener("input", () => { incomeDateEdited = true; renderIncomes(); });
   byId("income-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     if (incomeWritePending || !incomesReadable) return;
+    updateIncomeDates();
     byId("income-status").textContent = "";
     const name = byId("income-name").value.trim();
     const amount = parseAmount(byId("income-amount").value);
@@ -170,6 +224,7 @@
         }
         incomes = next;
         byId("income-form").reset();
+        incomeDateEdited = false;
         byId("income-date").value = localDate();
         byId("income-status").textContent = "Доход добавлен";
       };
